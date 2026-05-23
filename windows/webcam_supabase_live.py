@@ -211,7 +211,7 @@ def try_create_unknown_face(
             label = f"auto-created: {description[:120]}"
         row = cache.insert_known_face(
             embedding=encoding,
-            person_name=f"Unknown {stamp}",
+            person_name="unidentified",
             label=label,
             photo_url=image_row.get("image_url", photo_url),
             last_seen_at=datetime.now(timezone.utc).isoformat(),
