@@ -27,3 +27,7 @@ Support two face paths:
 ## User ownership note
 - User asked for the Windows side plus matching from Supabase project `gmmpltgvtonpnrfckrvy.supabase.co`.
 - Actual public face table discovered by live probing is `known_faces`.
+
+## Current blocker
+- The previously used Supabase publishable key shown in `README.md` no longer authorizes REST writes. A direct `POST` test on 2026-05-23 returned `401 Unauthorized`.
+- Added `scripts/insert_test_face_to_supabase.ps1` to generate a simple face PNG, encode it as a base64 data URL, and insert a test row once a valid key is supplied through `SUPABASE_PUBLISHABLE_KEY` or `-ApiKey`.
