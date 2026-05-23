@@ -1,0 +1,17 @@
+# macOS
+.DS_Store
+
+# Xcode
+**/xcuserdata/
+**/*.xcuserstate
+**/DerivedData/
+**/.swiftpm/
+**/build/
+
+# Node
+node_modules/
+.next/
+out/
+
+# Claude Code local state
+.claude/
