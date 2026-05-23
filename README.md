@@ -130,6 +130,167 @@ gcloud run deploy aegisai-limelight-preview \
 
 Important: if your Limelight feed is only reachable on the Raspberry Pi LAN at addresses like `172.29.0.1` or `limelight.local`, a Cloud Run service in Google Cloud cannot reach it directly. In that case, Cloud Run deployment is code-ready, but the upstream source must first be made reachable from Google Cloud.
 
+## Windows face matching against Supabase
+
+This repo also includes a Windows receiver that matches incoming face embeddings against the Supabase `known_faces` table.
+
+Observed public table shape in the target Supabase project:
+
+- `known_faces.id`
+- `known_faces.embedding`
+- `known_faces.photo_url`
+- `known_faces.person_name`
+- `known_faces.label`
+- `known_faces.created_at`
+- `known_faces.last_seen_at`
+
+### Windows receiver
+
+```powershell
+py -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements-windows.txt
+$env:SUPABASE_PROJECT_URL="https://gmmpltgvtonpnrfckrvy.supabase.co"
+$env:SUPABASE_PUBLISHABLE_KEY="<your publishable key>"
+python windows\face_receiver.py --host 0.0.0.0 --port 5000
+```
+
+Defaults:
+
+- metric: `euclidean`
+- threshold: `0.6`
+- table: `known_faces`
+
+Use `--metric cosine --threshold 0.65` if your stored embeddings were produced by an OpenCV SFace-style pipeline instead of `face_recognition`.
+
+### Pi sender
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements-face.txt
+python pi/face_capture_sender.py \
+  --upload-url http://<WINDOWS_PC_IP>:5000/upload \
+  --device /dev/video0 \
+  --show
+```
+
+The sender:
+
+- captures webcam frames
+- detects faces with `face_recognition.face_locations`
+- computes embeddings with `face_recognition.face_encodings`
+- uploads an annotated frame plus JSON metadata to the Windows receiver
+
+The Windows receiver:
+
+- refreshes `known_faces` from Supabase
+- matches each incoming embedding against stored embeddings
+- tries to create a new `known_faces` row when no match is found
+- saves a `.jpg` and matching `.json` under `received_faces/`
+- returns the match result in the upload response
+
+## Windows-only stack
+
+If the webcam is plugged directly into this Windows PC, you can skip the Raspberry Pi entirely and run local capture plus Supabase matching on one machine.
+
+Install:
+
+```powershell
+py -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements-windows-camera.txt
+```
+
+Run:
+
+```powershell
+python windows\webcam_supabase_match.py `
+  --api-key "sb_publishable_6JWerc5NPf-fNmzEoGAiYw_B9OGynLb" `
+  --project-url "https://gmmpltgvtonpnrfckrvy.supabase.co" `
+  --device 0
+```
+
+This path:
+
+- opens the local Windows webcam
+- detects faces with `face_recognition`
+- computes face embeddings locally
+- loads known embeddings from Supabase `known_faces`
+- matches each face locally on the PC
+- skips recently seen repeats
+- tries to create a new `known_faces` row when no match is found
+- draws labels on the live webcam view
+- saves annotated `.jpg` and `.json` results into `received_faces_local/`
+
+Notes:
+
+- default metric is `euclidean` with threshold `0.6`, which matches the usual `face_recognition` convention
+- recent-face suppression defaults to distance `0.25` and `45` seconds, similar to the FamiliarAI pattern
+- if your Supabase `known_faces.embedding` values came from an OpenCV SFace pipeline instead, try `--metric cosine --threshold 0.65`
+- if `known_faces` is empty or not readable through the publishable key, all detections will show as `unknown`
+- if Supabase insert is blocked by RLS, the script will keep running and save the exact insert error in the JSON output
+
+### Windows-only live web view
+
+If you want the same Windows webcam stack plus a browser-accessible live view:
+
+```powershell
+py -3.11 -m venv .venv311
+.venv311\Scripts\Activate.ps1
+pip install -r requirements-windows-live.txt
+python windows\webcam_supabase_live.py `
+  --api-key "<your Supabase key>" `
+  --project-url "https://gmmpltgvtonpnrfckrvy.supabase.co" `
+  --device 0 `
+  --port 8080
+```
+
+This exposes:
+
+- `http://127.0.0.1:8080/`
+- `http://127.0.0.1:8080/stream.mjpg`
+- `http://127.0.0.1:8080/healthz`
+
+To make it public quickly on Windows:
+
+```powershell
+npx localtunnel --port 8080
+```
+
+Use the returned URL for the page and append `/stream.mjpg` for the raw stream.
+
+### `lumiai` command from anywhere on Windows
+
+Install the global launcher once:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install_lumiai_command.ps1 `
+  -SupabaseApiKey "<your Supabase service key>"
+```
+
+Then open a new terminal and run:
+
+```powershell
+lumiai
+```
+
+Useful commands:
+
+```powershell
+lumiai
+lumiai status
+lumiai url
+lumiai stop
+```
+
+Default behavior:
+
+- starts the Windows webcam live matcher on port `8080`
+- starts `localtunnel`
+- prints the local and public live-view links
+- if Supabase insert is blocked by RLS, the scripts keep running and store the exact insert error in the JSON output
+
 ## Gemini prompt
 
 Use [prompts/gemini_system_prompt.txt](C:/Users/emmad/Downloads/Hackathon-synthesis/AegisAI/prompts/gemini_system_prompt.txt:1) as the system instruction for the Pi-side Gemini request.

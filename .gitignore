@@ -1,3 +1,7 @@
 .venv/
+.venv311/
 __pycache__/
 *.pyc
+runlogs/
+received_faces/
+received_faces_local/

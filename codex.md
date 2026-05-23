@@ -1,25 +1,29 @@
 # AegisAI Repo Notes
 
 ## Active branch
-- `raw-limelight-feed`
+- `windows-face-supabase-match`
 
 ## Scope for this branch
-- Raspberry Pi 5 integration with Limelight.
-- Raw Limelight live video display only.
-- No face processing, heuristics, or cloud logic in this branch.
+- Windows receiver for Pi face uploads.
+- Supabase-backed face matching against `known_faces`.
+- Pi sender based on `face_recognition`.
+- Windows-only webcam stack with no Raspberry Pi dependency.
 
 ## Immediate goal
-Prove we can open and display the live Limelight 3A video stream from the Pi.
+Support two face paths:
+- Pi sender -> Windows receiver -> Supabase matching
+- Windows webcam -> local matching against Supabase with no Pi
 
 ## Demo priorities
-1. Open the Limelight stream successfully.
-2. Show the live feed on the Pi with no processing.
-3. Keep this branch minimal and isolated.
+1. Windows receiver loads known face embeddings from Supabase.
+2. Pi sender uploads face embeddings and annotated frames.
+3. Matching works against the real project schema, not the FamiliarAI demo schema.
+4. Windows-only local webcam path works when the camera is plugged into this PC.
 
 ## Current repo state
-- Fresh repo scaffolded locally.
-- No existing app code yet.
+- Raw Limelight preview path already exists on another branch lineage.
+- This branch adds a face sender/receiver path and real Supabase matching.
 
 ## User ownership note
-- User is doing the Raspberry Pi part.
-- Current request is to focus on a simple raw live-feed viewer for Limelight 3A only.
+- User asked for the Windows side plus matching from Supabase project `gmmpltgvtonpnrfckrvy.supabase.co`.
+- Actual public face table discovered by live probing is `known_faces`.
