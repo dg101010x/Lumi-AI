@@ -31,3 +31,19 @@ Support two face paths:
 ## Current blocker
 - The previously used Supabase publishable key shown in `README.md` no longer authorizes REST writes. A direct `POST` test on 2026-05-23 returned `401 Unauthorized`.
 - Added `scripts/insert_test_face_to_supabase.ps1` to generate a simple face PNG, encode it as a base64 data URL, and insert a test row once a valid key is supplied through `SUPABASE_PUBLISHABLE_KEY` or `-ApiKey`.
+
+## Localhost receiver status
+- `windows/face_receiver.py` now serves a simple root page at `/` and health JSON at `/healthz`.
+- The receiver also accepts JSON base64 uploads at `/upload-base64` in addition to multipart `/upload`.
+- `windows/send_first_face_base64.py` captures the first detected webcam face, base64-encodes the crop, and posts it to `/upload-base64`.
+
+## Supabase schema and auth facts
+- `known_faces` accepts rows with `embedding`, `person_name`, `label`, and `photo_url`.
+- `images` accepts rows with `image_name` and `image_url`.
+- The publishable key can read enough for the receiver to start, but direct REST writes to `known_faces` fail under RLS.
+- A service-role key was provided on 2026-05-23 and successfully used for verified inserts into both `known_faces` and `public.images`.
+- Do not store the raw service-role key in repo files; keep it in environment variables or local untracked secrets only.
+
+## Verified inserts on 2026-05-23
+- Inserted base64 `data:image/png;base64,...` rows into `known_faces` with random test names and verified they could be read back.
+- Inserted base64 `data:image/png;base64,...` rows into `public.images` using `image_name` and `image_url`, and verified those rows could be read back.

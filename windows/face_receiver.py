@@ -2,17 +2,19 @@ from __future__ import annotations
 
 import argparse
 import base64
+import html
 import json
 import os
 import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+import socket
 from typing import Any
 
 import cv2
 import face_recognition
-from flask import Flask, jsonify, request
+from flask import Flask, Response, jsonify, request
 import requests
 
 from face_matching import choose_best_match, distance_for_metric
@@ -45,10 +47,23 @@ camera_state: dict[str, Any] = {
     "last_detection_at": "",
     "last_result": None,
 }
+latest_camera_jpeg: bytes | None = None
 
 
 def utc_stamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def discover_local_ipv4() -> str:
+    try:
+        hostname = socket.gethostname()
+        for info in socket.getaddrinfo(hostname, None, family=socket.AF_INET):
+            address = info[4][0]
+            if not address.startswith("127."):
+                return address
+    except OSError:
+        pass
+    return "127.0.0.1"
 
 
 def safe_json_loads(raw: str) -> dict[str, Any]:
@@ -77,6 +92,49 @@ def update_camera_state(**changes: Any) -> dict[str, Any]:
 def get_camera_state() -> dict[str, Any]:
     with camera_state_lock:
         return dict(camera_state)
+
+
+def set_latest_camera_jpeg(frame_bgr, quality: int = 80) -> None:
+    global latest_camera_jpeg
+    ok, encoded = cv2.imencode(".jpg", frame_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
+    if not ok:
+        return
+    with camera_state_lock:
+        latest_camera_jpeg = encoded.tobytes()
+
+
+def get_latest_camera_jpeg() -> bytes | None:
+    with camera_state_lock:
+        return latest_camera_jpeg
+
+
+def render_known_faces_html(known_faces: list[dict[str, Any]]) -> str:
+    if not known_faces:
+        return "<p style='color:#9fb0c3'>No known faces loaded from Supabase yet.</p>"
+
+    cards: list[str] = []
+    for face in known_faces:
+        person_name = str(face.get("person_name") or "").strip()
+        label = str(face.get("label") or "").strip()
+        display_name = person_name or label or str(face.get("id") or "unknown")
+        photo_url = str(face.get("photo_url") or "").strip()
+        image_html = (
+            f"<img src='{html.escape(photo_url, quote=True)}' "
+            "style='width:96px;height:96px;object-fit:cover;border-radius:10px;border:1px solid #334;background:#1b222b' />"
+            if photo_url
+            else "<div style='width:96px;height:96px;border-radius:10px;border:1px solid #334;background:#1b222b;display:flex;align-items:center;justify-content:center;color:#7f90a3'>No image</div>"
+        )
+        subtitle = person_name if person_name else label
+        if subtitle == display_name:
+            subtitle = ""
+        cards.append(
+            "<div style='width:120px;background:#151b22;border:1px solid #2a3440;border-radius:12px;padding:10px'>"
+            f"{image_html}"
+            f"<div style='margin-top:8px;font-weight:600'>{html.escape(display_name)}</div>"
+            f"<div style='margin-top:4px;color:#9fb0c3;font-size:12px;min-height:28px'>{html.escape(subtitle or '')}</div>"
+            "</div>"
+        )
+    return "<div style='display:flex;gap:12px;flex-wrap:wrap'>" + "".join(cards) + "</div>"
 
 
 def ensure_cache() -> SupabaseKnownFacesCache:
@@ -210,9 +268,35 @@ def camera_loop(
                 time.sleep(0.1)
                 continue
 
+            preview = frame.copy()
+
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             boxes = face_recognition.face_locations(rgb, model="hog")
             encodings = face_recognition.face_encodings(rgb, boxes)
+
+            for top, right, bottom, left in boxes:
+                cv2.rectangle(preview, (left, top), (right, bottom), (0, 255, 0), 2)
+            if boxes:
+                cv2.putText(
+                    preview,
+                    f"faces: {len(boxes)}",
+                    (12, 28),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8,
+                    (0, 255, 0),
+                    2,
+                )
+            else:
+                cv2.putText(
+                    preview,
+                    "waiting for face",
+                    (12, 28),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8,
+                    (0, 200, 255),
+                    2,
+                )
+            set_latest_camera_jpeg(preview)
 
             if not boxes or not encodings:
                 time.sleep(poll_seconds)
@@ -451,15 +535,83 @@ def healthz():
 @app.get("/")
 def index():
     known_faces = ensure_cache().get_faces()
+    camera = get_camera_state()
+    local_ip = discover_local_ipv4()
+    known_faces_html = render_known_faces_html(known_faces)
     return (
-        "<html><body style='font-family:Segoe UI,Arial,sans-serif;padding:24px'>"
-        "<h1>Face Receiver Running</h1>"
+        "<html><body style='font-family:Segoe UI,Arial,sans-serif;padding:24px;background:#101418;color:#f3f6fb'>"
+        "<h1 style='margin-top:0'>Face Receiver Running</h1>"
+        "<div style='display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap'>"
+        "<div>"
+        "<img src='/camera/stream' style='width:640px;max-width:90vw;border:1px solid #334;border-radius:12px;background:#1b222b' />"
+        "<div style='margin-top:12px;display:flex;gap:10px'>"
+        "<button onclick=\"fetch('/camera/start',{method:'POST'}).then(()=>setTimeout(()=>location.reload(),300))\" style='padding:10px 14px'>Start Camera</button>"
+        "<button onclick=\"fetch('/camera/stop',{method:'POST'}).then(()=>setTimeout(()=>location.reload(),300))\" style='padding:10px 14px'>Stop Camera</button>"
+        "<button onclick='location.reload()' style='padding:10px 14px'>Refresh</button>"
+        "</div>"
+        "</div>"
+        "<div style='min-width:260px'>"
         f"<p><strong>Known faces:</strong> {len(known_faces)}</p>"
         f"<p><strong>Metric:</strong> {match_metric}</p>"
         f"<p><strong>Threshold:</strong> {match_threshold}</p>"
-        "<p><a href='/healthz'>/healthz</a></p>"
+        f"<p><strong>Camera running:</strong> {camera.get('running')}</p>"
+        f"<p><strong>Uploads sent:</strong> {camera.get('uploads_sent')}</p>"
+        f"<p><strong>Last message:</strong> {camera.get('last_message')}</p>"
+        f"<p><strong>Last error:</strong> {camera.get('last_error') or '-'}</p>"
+        f"<p><strong>Local network stream:</strong> <a href='http://{local_ip}:5000/camera/stream' style='color:#8cc6ff'>http://{local_ip}:5000/camera/stream</a></p>"
+        "<p><a href='/healthz' style='color:#8cc6ff'>/healthz</a></p>"
+        "<p><a href='/camera/status' style='color:#8cc6ff'>/camera/status</a></p>"
+        "<p><a href='/camera/stream' style='color:#8cc6ff'>/camera/stream</a></p>"
+        "</div>"
+        "</div>"
+        "<div style='margin-top:28px'>"
+        "<h2 style='margin:0 0 12px 0'>Known Faces</h2>"
+        "<p style='margin:0 0 14px 0;color:#9fb0c3'>Names come from Supabase `person_name` first, then `label` if no name is present.</p>"
+        f"{known_faces_html}"
+        "</div>"
+        "<script>setTimeout(()=>location.reload(),4000)</script>"
         "</body></html>"
     )
+
+
+@app.get("/camera/status")
+def camera_status():
+    return jsonify(get_camera_state())
+
+
+@app.post("/camera/start")
+def camera_start():
+    state = start_camera_worker()
+    return jsonify({"ok": True, "camera": state})
+
+
+@app.post("/camera/stop")
+def camera_stop():
+    state = stop_camera_worker()
+    return jsonify({"ok": True, "camera": state})
+
+
+@app.get("/camera/frame.jpg")
+def camera_frame():
+    frame = get_latest_camera_jpeg()
+    if frame is None:
+        return Response(status=404)
+    return Response(frame, mimetype="image/jpeg")
+
+
+@app.get("/camera/stream")
+def camera_stream():
+    def generate():
+        while True:
+            frame = get_latest_camera_jpeg()
+            if frame is None:
+                time.sleep(0.1)
+                continue
+            yield (b"--frame\r\n"
+                   b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n")
+            time.sleep(0.12)
+
+    return Response(generate(), mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
 @app.post("/refresh")
@@ -633,6 +785,16 @@ def main() -> int:
         default=os.getenv("FACE_RECEIVER_OUTPUT_DIR", "received_faces"),
         help="Directory to store incoming images and JSON",
     )
+    parser.add_argument(
+        "--autostart-camera",
+        action="store_true",
+        help="Start the local camera watcher when the server boots",
+    )
+    parser.add_argument(
+        "--camera-device",
+        default=os.getenv("FACE_RECEIVER_CAMERA_DEVICE", "0"),
+        help="Camera device index or path for autostart mode",
+    )
     args = parser.parse_args()
 
     if not args.api_key:
@@ -656,6 +818,10 @@ def main() -> int:
     print(f"[INFO] Match threshold: {match_threshold}")
     print(f"[INFO] Output dir: {output_dir.resolve()}")
     print(f"[INFO] Listening on http://{args.host}:{args.port}")
+
+    if args.autostart_camera:
+        state = start_camera_worker(device=str(args.camera_device))
+        print(f"[INFO] Camera autostart requested. Running={state.get('running')} device={state.get('device')}")
 
     app.run(host=args.host, port=args.port, debug=False)
     return 0
