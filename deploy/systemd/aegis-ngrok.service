@@ -1,0 +1,14 @@
+[Unit]
+Description=AegisAI ngrok tunnel for public webcam preview
+After=network-online.target aegis-preview.service
+Wants=network-online.target aegis-preview.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/pranav/Documents/AeigisAI/AegisAI
+ExecStart=/home/pranav/Documents/AeigisAI/AegisAI/scripts/ngrok-watch.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

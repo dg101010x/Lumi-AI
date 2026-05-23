@@ -101,6 +101,17 @@ View recent tunnel logs:
 journalctl --user -u aegis-localtunnel.service -n 50 --no-pager
 ```
 
+To switch from `localtunnel` to `ngrok`, configure the ngrok authtoken and then install the ngrok user service:
+
+```bash
+~/.local/bin/ngrok config add-authtoken '<YOUR_TOKEN>'
+chmod +x scripts/ngrok-watch.sh
+install -m 0644 deploy/systemd/aegis-ngrok.service ~/.config/systemd/user/aegis-ngrok.service
+systemctl --user daemon-reload
+systemctl --user disable --now aegis-localtunnel.service
+systemctl --user enable --now aegis-ngrok.service
+```
+
 ## Cloud Run deployment
 
 The same preview server can run on Cloud Run, but it must be given a source that Cloud Run can actually reach.
@@ -129,6 +140,46 @@ gcloud run deploy aegisai-limelight-preview \
 ```
 
 Important: if your Limelight feed is only reachable on the Raspberry Pi LAN at addresses like `172.29.0.1` or `limelight.local`, a Cloud Run service in Google Cloud cannot reach it directly. In that case, Cloud Run deployment is code-ready, but the upstream source must first be made reachable from Google Cloud.
+
+## Face capture to a Windows PC
+
+This path uses [`face_recognition`](https://github.com/ageitgey/face_recognition) on the Pi to detect faces from the webcam and upload annotated JPEGs to a Windows machine.
+
+Pi side:
+
+```bash
+source .venv/bin/activate
+python -m pip install -r requirements-face.txt
+python pi/face_capture_sender.py --upload-url http://<WINDOWS_PC_IP>:5000/upload --device /dev/video1 --show
+```
+
+Optional face recognition against known people:
+
+```bash
+python pi/face_capture_sender.py \
+  --upload-url http://<WINDOWS_PC_IP>:5000/upload \
+  --device /dev/video1 \
+  --known-dir ./known_faces
+```
+
+The `known_faces` folder should contain one image per person, and each filename becomes the label.
+
+Windows side:
+
+```powershell
+py -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements-windows.txt
+python windows\face_receiver.py --host 0.0.0.0 --port 5000
+```
+
+Then open Windows Defender Firewall if prompted, and use:
+
+```text
+http://<WINDOWS_PC_IP>:5000/
+```
+
+Uploaded images and sidecar JSON metadata are saved into `received_faces\`.
 
 ## Gemini prompt
 
