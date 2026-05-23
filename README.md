@@ -66,6 +66,41 @@ npx localtunnel --port 8080
 
 That returns a public `https://...loca.lt` URL that forwards to the local preview page.
 
+## Keep it running
+
+To keep the preview server and tunnel running across logouts and reboots on the Pi:
+
+```bash
+cd /home/pranav/Documents/AeigisAI/AegisAI
+chmod +x scripts/localtunnel-watch.sh scripts/install_user_services.sh
+./scripts/install_user_services.sh
+```
+
+Check service status:
+
+```bash
+systemctl --user status aegis-preview.service
+systemctl --user status aegis-localtunnel.service
+```
+
+Get the current public tunnel URL:
+
+```bash
+cat /run/user/1000/aegisai/localtunnel-url.txt
+```
+
+The install script stores the current working Limelight stream URL in:
+
+```bash
+cat ~/.config/aegis-preview.env
+```
+
+View recent tunnel logs:
+
+```bash
+journalctl --user -u aegis-localtunnel.service -n 50 --no-pager
+```
+
 ## Cloud Run deployment
 
 The same preview server can run on Cloud Run, but it must be given a source that Cloud Run can actually reach.

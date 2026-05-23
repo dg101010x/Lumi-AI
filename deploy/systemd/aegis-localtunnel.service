@@ -1,0 +1,15 @@
+[Unit]
+Description=AegisAI localtunnel for public Limelight preview
+After=network-online.target aegis-preview.service
+Wants=network-online.target aegis-preview.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/pranav/Documents/AeigisAI/AegisAI
+Environment=LOCALTUNNEL_PORT=8080
+ExecStart=/home/pranav/Documents/AeigisAI/AegisAI/scripts/localtunnel-watch.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
