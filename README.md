@@ -43,6 +43,29 @@ python pi/limelight_video_viewer.py --host limelight.local
 python pi/limelight_video_viewer.py --url "http://<LIMELIGHT_IP>:5800/<STREAM_PATH>"
 ```
 
+## Local web preview
+
+If you want a simple webpage and MJPEG endpoint for the raw Limelight feed, run:
+
+```bash
+source .venv/bin/activate
+python pi/limelight_web_preview.py --source-host limelight.local
+```
+
+This exposes:
+
+- `http://<PI_IP>:8080/`
+- `http://<PI_IP>:8080/stream.mjpg`
+- `http://<PI_IP>:8080/healthz`
+
+For a fast public demo tunnel without router changes, you can proxy the local preview with:
+
+```bash
+npx localtunnel --port 8080
+```
+
+That returns a public `https://...loca.lt` URL that forwards to the local preview page.
+
 ## Gemini prompt
 
 Use [prompts/gemini_system_prompt.txt](C:/Users/emmad/Downloads/Hackathon-synthesis/AegisAI/prompts/gemini_system_prompt.txt:1) as the system instruction for the Pi-side Gemini request.

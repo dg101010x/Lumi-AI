@@ -1,5 +1,6 @@
 import argparse
 import ipaddress
+import os
 import socket
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -22,12 +23,30 @@ DEFAULT_STREAM_PATHS = [
 ]
 
 
+def dedupe(items: Iterable[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        if item and item not in seen:
+            seen.add(item)
+            result.append(item)
+    return result
+
+
+def build_base_urls(hosts: Iterable[str], ports: Iterable[int] = DEFAULT_PORTS) -> list[str]:
+    urls: list[str] = []
+    for host in hosts:
+        for port in ports:
+            urls.append(f"http://{host}:{port}")
+    return dedupe(urls)
+
+
 def candidate_base_urls() -> list[str]:
     urls: list[str] = []
 
-    for host in DEFAULT_HOST_CANDIDATES:
-        for port in DEFAULT_PORTS:
-            urls.append(f"http://{host}:{port}")
+    urls.extend(build_base_urls(DEFAULT_HOST_CANDIDATES))
+    urls.extend(build_base_urls(resolved_ipv4_hosts(DEFAULT_HOST_CANDIDATES)))
+    urls.extend(build_base_urls(neighbor_ipv4_hosts()))
 
     for subnet in local_subnets():
         for host in subnet.hosts():
@@ -35,7 +54,7 @@ def candidate_base_urls() -> list[str]:
             for port in DEFAULT_PORTS:
                 urls.append(f"http://{host_str}:{port}")
 
-    return urls
+    return dedupe(urls)
 
 
 def local_subnets() -> list[ipaddress.IPv4Network]:
@@ -60,6 +79,44 @@ def local_subnets() -> list[ipaddress.IPv4Network]:
     return subnets
 
 
+def resolved_ipv4_hosts(hosts: Iterable[str]) -> list[str]:
+    resolved: list[str] = []
+
+    for host in hosts:
+        try:
+            infos = socket.getaddrinfo(host, None, family=socket.AF_INET, type=socket.SOCK_STREAM)
+        except socket.gaierror:
+            continue
+
+        for info in infos:
+            address = info[4][0]
+            resolved.append(address)
+
+    return dedupe(resolved)
+
+
+def neighbor_ipv4_hosts() -> list[str]:
+    path = "/proc/net/arp"
+    if not os.path.exists(path):
+        return []
+
+    hosts: list[str] = []
+    with open(path, "r", encoding="ascii") as arp_table:
+        next(arp_table, None)
+        for line in arp_table:
+            columns = line.split()
+            if len(columns) < 6:
+                continue
+            ip_address, _, flags, _, _, device = columns[:6]
+            if flags != "0x2":
+                continue
+            if device == "lo":
+                continue
+            hosts.append(ip_address)
+
+    return dedupe(hosts)
+
+
 def stream_candidates(base_urls: Iterable[str]) -> list[str]:
     urls: list[str] = []
     for base_url in base_urls:
@@ -81,15 +138,30 @@ def check_stream(url: str) -> str | None:
     return None
 
 
-def autodiscover_stream() -> str | None:
-    candidates = stream_candidates(candidate_base_urls())
-    with ThreadPoolExecutor(max_workers=32) as executor:
+def first_working_stream(base_urls: Iterable[str]) -> str | None:
+    candidates = stream_candidates(base_urls)
+    with ThreadPoolExecutor(max_workers=min(32, max(1, len(candidates)))) as executor:
         futures = {executor.submit(check_stream, url): url for url in candidates}
         for future in as_completed(futures):
             found = future.result()
             if found:
                 return found
     return None
+
+
+def autodiscover_stream() -> str | None:
+    return first_working_stream(candidate_base_urls())
+
+
+def candidate_stream_from_host(host: str) -> str | None:
+    host = host.strip().rstrip("/")
+    if host.startswith(("http://", "https://")):
+        return first_working_stream([host])
+
+    hosts = [host]
+    hosts.extend(resolved_ipv4_hosts([host]))
+    hosts.extend(neighbor_ipv4_hosts())
+    return first_working_stream(build_base_urls(hosts))
 
 
 def main() -> int:
@@ -108,7 +180,7 @@ def main() -> int:
 
     stream_url = args.url
     if not stream_url and args.host:
-        stream_url = f"http://{args.host}:5800{DEFAULT_STREAM_PATHS[0]}"
+        stream_url = candidate_stream_from_host(args.host)
 
     if not stream_url:
         print("Trying to auto-discover Limelight stream...", flush=True)
