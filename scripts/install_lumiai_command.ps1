@@ -2,8 +2,10 @@ param(
     [string]$RepoPath = (Split-Path -Parent $PSScriptRoot),
     [string]$SupabaseProjectUrl = "https://gmmpltgvtonpnrfckrvy.supabase.co",
     [string]$SupabaseApiKey = "",
+    [string]$GeminiApiKey = "",
     [int]$Device = 0,
     [int]$Port = 8080,
+    [string]$ImageBaseUrl = "",
     [switch]$EnablePublic
 )
 
@@ -27,8 +29,10 @@ $config = [ordered]@{
     repo_path = $repoPathResolved
     supabase_project_url = $SupabaseProjectUrl
     supabase_api_key = $SupabaseApiKey
+    gemini_api_key = $GeminiApiKey
     device = $Device
     port = $Port
+    image_base_url = $ImageBaseUrl
     public_enabled = [bool]$EnablePublic
 }
 $config | ConvertTo-Json -Depth 4 | Set-Content -Path $configPath -Encoding UTF8

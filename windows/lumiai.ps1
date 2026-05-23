@@ -86,6 +86,12 @@ function Start-LumiAi {
         "--device", [string]$config.device,
         "--port", [string]$config.port
     )
+    if ($config.gemini_api_key) {
+        $webcamArgs += @("--gemini-api-key", [string]$config.gemini_api_key)
+    }
+    if ($config.image_base_url) {
+        $webcamArgs += @("--image-base-url", [string]$config.image_base_url)
+    }
 
     $webcam = Start-Process -FilePath $pythonPath -ArgumentList $webcamArgs -WorkingDirectory $repoPath -WindowStyle Hidden -RedirectStandardOutput (Get-LogPath "webcam") -RedirectStandardError (Get-ErrPath "webcam") -PassThru
     Set-Content -Path (Get-PidPath "webcam") -Value $webcam.Id
