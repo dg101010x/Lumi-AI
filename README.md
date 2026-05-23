@@ -66,6 +66,35 @@ npx localtunnel --port 8080
 
 That returns a public `https://...loca.lt` URL that forwards to the local preview page.
 
+## Cloud Run deployment
+
+The same preview server can run on Cloud Run, but it must be given a source that Cloud Run can actually reach.
+
+Environment variables:
+
+- `PORT`: injected by Cloud Run
+- `LIMELIGHT_SOURCE_URL`: full upstream MJPEG URL
+- `LIMELIGHT_SOURCE_HOST`: optional host/IP for local probing when the service runs on a machine that can see the camera
+
+Build and deploy:
+
+```bash
+gcloud config set project synthesis-hack26svl-105
+
+gcloud services enable \
+  run.googleapis.com \
+  cloudbuild.googleapis.com \
+  artifactregistry.googleapis.com
+
+gcloud run deploy aegisai-limelight-preview \
+  --source . \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --set-env-vars LIMELIGHT_SOURCE_URL=http://REACHABLE_HOST:5800/stream.mjpg
+```
+
+Important: if your Limelight feed is only reachable on the Raspberry Pi LAN at addresses like `172.29.0.1` or `limelight.local`, a Cloud Run service in Google Cloud cannot reach it directly. In that case, Cloud Run deployment is code-ready, but the upstream source must first be made reachable from Google Cloud.
+
 ## Gemini prompt
 
 Use [prompts/gemini_system_prompt.txt](C:/Users/emmad/Downloads/Hackathon-synthesis/AegisAI/prompts/gemini_system_prompt.txt:1) as the system instruction for the Pi-side Gemini request.

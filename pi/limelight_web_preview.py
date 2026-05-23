@@ -175,10 +175,14 @@ class PreviewServer(BaseHTTPRequestHandler):
 
 
 def resolve_source_url(args: argparse.Namespace) -> str | None:
-    if args.source_url:
-        return args.source_url
-    if args.source_host:
-        return candidate_stream_from_host(args.source_host)
+    source_url = args.source_url or os.getenv("LIMELIGHT_SOURCE_URL")
+    if source_url:
+        return source_url
+
+    source_host = args.source_host or os.getenv("LIMELIGHT_SOURCE_HOST")
+    if source_host:
+        return candidate_stream_from_host(source_host)
+
     return autodiscover_stream()
 
 
@@ -186,8 +190,17 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Expose the Limelight feed on a local webpage and MJPEG endpoint."
     )
-    parser.add_argument("--bind", default="0.0.0.0", help="Bind address. Default: 0.0.0.0")
-    parser.add_argument("--port", type=int, default=8080, help="HTTP port. Default: 8080")
+    parser.add_argument(
+        "--bind",
+        default=os.getenv("BIND", "0.0.0.0"),
+        help="Bind address. Default: 0.0.0.0",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.getenv("PORT", "8080")),
+        help="HTTP port. Default: $PORT or 8080",
+    )
     parser.add_argument("--source-url", help="Full upstream Limelight stream URL")
     parser.add_argument("--source-host", help="Limelight host or IP to probe")
     args = parser.parse_args()

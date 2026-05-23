@@ -6,7 +6,6 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Iterable
 
-import cv2
 import requests
 
 
@@ -165,6 +164,8 @@ def candidate_stream_from_host(host: str) -> str | None:
 
 
 def main() -> int:
+    import cv2
+
     parser = argparse.ArgumentParser(
         description="Display the live Limelight video feed."
     )
