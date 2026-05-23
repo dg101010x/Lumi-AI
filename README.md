@@ -206,7 +206,7 @@ Run:
 
 ```powershell
 python windows\webcam_supabase_match.py `
-  --api-key "sb_publishable_6JWerc5NPf-fNmzEoGAiYw_B9OGynLb" `
+  --api-key "<your publishable key>" `
   --project-url "https://gmmpltgvtonpnrfckrvy.supabase.co" `
   --device 0
 ```

@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import cv2
+import face_recognition
 from flask import Flask, jsonify, request
 import requests
 
@@ -27,6 +32,19 @@ output_dir = Path("received_faces")
 recent_faces: list[dict[str, Any]] = []
 recent_distance_threshold = 0.25
 recent_seconds = 45.0
+camera_thread: threading.Thread | None = None
+camera_stop_event = threading.Event()
+camera_state_lock = threading.Lock()
+camera_state: dict[str, Any] = {
+    "running": False,
+    "device": "0",
+    "uploads_sent": 0,
+    "last_error": "",
+    "last_message": "camera not started",
+    "last_upload_at": "",
+    "last_detection_at": "",
+    "last_result": None,
+}
 
 
 def utc_stamp() -> str:
@@ -38,6 +56,27 @@ def safe_json_loads(raw: str) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("metadata must decode to a JSON object")
     return payload
+
+
+def safe_base64_image_to_bytes(raw: str) -> bytes:
+    payload = raw.strip()
+    if payload.startswith("data:"):
+        comma = payload.find(",")
+        if comma == -1:
+            raise ValueError("invalid data URL")
+        payload = payload[comma + 1 :]
+    return base64.b64decode(payload, validate=True)
+
+
+def update_camera_state(**changes: Any) -> dict[str, Any]:
+    with camera_state_lock:
+        camera_state.update(changes)
+        return dict(camera_state)
+
+
+def get_camera_state() -> dict[str, Any]:
+    with camera_state_lock:
+        return dict(camera_state)
 
 
 def ensure_cache() -> SupabaseKnownFacesCache:
@@ -75,6 +114,193 @@ def mark_recent_face(embedding: list[float], display_name: str, now_ts: float) -
             "seen_at": now_ts,
         }
     )
+
+
+def process_incoming_image_bytes(
+    image_bytes: bytes,
+    metadata: dict[str, Any],
+    *,
+    transport: str,
+    source: str,
+) -> dict[str, Any]:
+    known_faces = ensure_cache().get_faces()
+    results = classify_embeddings(metadata, known_faces)
+
+    stamp = utc_stamp()
+    base_name = metadata.get("frame_id") or stamp
+    if not isinstance(base_name, str):
+        base_name = str(base_name)
+    base_name = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in base_name)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    image_path = output_dir / f"{base_name}.jpg"
+    json_path = output_dir / f"{base_name}.json"
+    image_path.write_bytes(image_bytes)
+    image_url = image_path.resolve().as_uri()
+
+    created = create_new_faces_for_unknowns(
+        metadata,
+        results,
+        ensure_cache(),
+        image_url=image_url,
+        image_name=base_name,
+    )
+
+    json_payload = {
+        "received_at": stamp,
+        "metadata": metadata,
+        "matches": results,
+        "transport": transport,
+        "source": source,
+        "created": created,
+    }
+    json_path.write_text(json.dumps(json_payload, indent=2), encoding="utf-8")
+
+    return {
+        "ok": True,
+        "saved_image": str(image_path),
+        "saved_json": str(json_path),
+        "matches": results,
+        "created": created,
+        "known_faces_count": len(known_faces),
+        "transport": transport,
+        "source": source,
+    }
+
+
+def process_base64_upload_payload(
+    image_base64: str,
+    metadata: dict[str, Any],
+    *,
+    source: str,
+) -> dict[str, Any]:
+    image_bytes = safe_base64_image_to_bytes(image_base64)
+    return process_incoming_image_bytes(image_bytes, metadata, transport="base64", source=source)
+
+
+def camera_loop(
+    *,
+    device: str,
+    jpeg_quality: int,
+    repeat_distance: float,
+    repeat_seconds: float,
+    poll_seconds: float,
+) -> None:
+    update_camera_state(
+        running=True,
+        device=device,
+        last_error="",
+        last_message="starting camera",
+        last_result=None,
+    )
+
+    cap = cv2.VideoCapture(int(device) if str(device).isdigit() else device)
+    if not cap.isOpened():
+        update_camera_state(running=False, last_error=f"Could not open camera device: {device}", last_message="camera open failed")
+        return
+
+    last_uploaded_embedding = None
+    last_uploaded_ts = 0.0
+
+    try:
+        update_camera_state(last_message="camera watching for faces")
+        while not camera_stop_event.is_set():
+            ok, frame = cap.read()
+            if not ok:
+                time.sleep(0.1)
+                continue
+
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            boxes = face_recognition.face_locations(rgb, model="hog")
+            encodings = face_recognition.face_encodings(rgb, boxes)
+
+            if not boxes or not encodings:
+                time.sleep(poll_seconds)
+                continue
+
+            now = time.time()
+            encoding = encodings[0]
+            update_camera_state(last_detection_at=datetime.now(timezone.utc).isoformat(), last_message="face detected")
+
+            if last_uploaded_embedding is not None:
+                distance = float(face_recognition.face_distance([last_uploaded_embedding], encoding)[0])
+                if distance <= repeat_distance and (now - last_uploaded_ts) <= repeat_seconds:
+                    time.sleep(poll_seconds)
+                    continue
+
+            top, right, bottom, left = boxes[0]
+            face_crop = frame[top:bottom, left:right]
+            if face_crop.size == 0:
+                time.sleep(poll_seconds)
+                continue
+
+            ok, encoded = cv2.imencode(".jpg", face_crop, [int(cv2.IMWRITE_JPEG_QUALITY), jpeg_quality])
+            if not ok:
+                update_camera_state(last_error="Failed to encode face crop", last_message="encode failed")
+                time.sleep(poll_seconds)
+                continue
+
+            image_base64 = "data:image/jpeg;base64," + base64.b64encode(encoded.tobytes()).decode("ascii")
+            metadata = {
+                "frame_id": f"live-face-{utc_stamp()}",
+                "captured_at": utc_stamp(),
+                "boxes": [{"top": top, "right": right, "bottom": bottom, "left": left}],
+                "embeddings": [encoding.tolist()],
+            }
+
+            try:
+                result = process_base64_upload_payload(image_base64, metadata, source="local_camera")
+                last_uploaded_embedding = encoding
+                last_uploaded_ts = now
+                state = get_camera_state()
+                update_camera_state(
+                    uploads_sent=int(state.get("uploads_sent", 0)) + 1,
+                    last_upload_at=datetime.now(timezone.utc).isoformat(),
+                    last_result=result,
+                    last_message="face uploaded",
+                    last_error="",
+                )
+            except Exception as exc:
+                update_camera_state(last_error=str(exc), last_message="upload failed")
+
+            time.sleep(poll_seconds)
+    finally:
+        cap.release()
+        update_camera_state(running=False, last_message="camera stopped")
+
+
+def start_camera_worker(
+    *,
+    device: str = "0",
+    jpeg_quality: int = 85,
+    repeat_distance: float = 0.45,
+    repeat_seconds: float = 15.0,
+    poll_seconds: float = 0.25,
+) -> dict[str, Any]:
+    global camera_thread
+
+    if camera_thread is not None and camera_thread.is_alive():
+        return get_camera_state()
+
+    camera_stop_event.clear()
+    camera_thread = threading.Thread(
+        target=camera_loop,
+        kwargs={
+            "device": device,
+            "jpeg_quality": jpeg_quality,
+            "repeat_distance": repeat_distance,
+            "repeat_seconds": repeat_seconds,
+            "poll_seconds": poll_seconds,
+        },
+        daemon=True,
+    )
+    camera_thread.start()
+    return update_camera_state(device=device, last_message="camera worker started")
+
+
+def stop_camera_worker() -> dict[str, Any]:
+    camera_stop_event.set()
+    return update_camera_state(last_message="camera stop requested")
 
 
 def classify_embeddings(metadata: dict[str, Any], known_faces: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -222,6 +448,20 @@ def healthz():
     )
 
 
+@app.get("/")
+def index():
+    known_faces = ensure_cache().get_faces()
+    return (
+        "<html><body style='font-family:Segoe UI,Arial,sans-serif;padding:24px'>"
+        "<h1>Face Receiver Running</h1>"
+        f"<p><strong>Known faces:</strong> {len(known_faces)}</p>"
+        f"<p><strong>Metric:</strong> {match_metric}</p>"
+        f"<p><strong>Threshold:</strong> {match_threshold}</p>"
+        "<p><a href='/healthz'>/healthz</a></p>"
+        "</body></html>"
+    )
+
+
 @app.post("/refresh")
 def refresh():
     known_faces = ensure_cache().get_faces(force=True)
@@ -260,6 +500,67 @@ def upload():
         "received_at": stamp,
         "metadata": metadata,
         "matches": results,
+    }
+    json_path.write_text(json.dumps(json_payload, indent=2), encoding="utf-8")
+
+    created = create_new_faces_for_unknowns(
+        metadata,
+        results,
+        ensure_cache(),
+        image_url=image_url,
+        image_name=base_name,
+    )
+
+    return jsonify(
+        {
+            "ok": True,
+            "saved_image": str(image_path),
+            "saved_json": str(json_path),
+            "matches": results,
+            "created": created,
+            "known_faces_count": len(known_faces),
+        }
+    )
+
+
+@app.post("/upload-base64")
+def upload_base64():
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"ok": False, "error": "expected JSON body"}), 400
+
+    image_base64 = body.get("image_base64")
+    metadata = body.get("metadata")
+    if not isinstance(image_base64, str) or not image_base64.strip():
+        return jsonify({"ok": False, "error": "missing image_base64"}), 400
+    if not isinstance(metadata, dict):
+        return jsonify({"ok": False, "error": "missing metadata object"}), 400
+
+    try:
+        image_bytes = safe_base64_image_to_bytes(image_base64)
+    except (ValueError, base64.binascii.Error) as exc:
+        return jsonify({"ok": False, "error": f"invalid image_base64: {exc}"}), 400
+
+    known_faces = ensure_cache().get_faces()
+    results = classify_embeddings(metadata, known_faces)
+
+    stamp = utc_stamp()
+    base_name = metadata.get("frame_id") or stamp
+    if not isinstance(base_name, str):
+        base_name = str(base_name)
+    base_name = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in base_name)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    image_path = output_dir / f"{base_name}.jpg"
+    json_path = output_dir / f"{base_name}.json"
+    image_path.write_bytes(image_bytes)
+    image_url = image_path.resolve().as_uri()
+
+    json_payload = {
+        "received_at": stamp,
+        "metadata": metadata,
+        "matches": results,
+        "transport": "base64",
     }
     json_path.write_text(json.dumps(json_payload, indent=2), encoding="utf-8")
 

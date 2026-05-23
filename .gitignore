@@ -3,5 +3,10 @@
 __pycache__/
 *.pyc
 runlogs/
+run_logs/
 received_faces/
 received_faces_local/
+.env
+.env.*
+*.log
+secrets.*
