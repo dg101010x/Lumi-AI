@@ -27,10 +27,23 @@ state_lock = threading.Lock()
 latest_jpeg: bytes | None = None
 latest_status: dict[str, Any] = {"ok": False, "message": "not started"}
 recent_faces: list[dict[str, Any]] = []
+server_events: list[dict[str, Any]] = []
 
 
 def utc_stamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def add_server_event(message: str, event_type: str = "system") -> None:
+    global server_events
+    with state_lock:
+        server_events.append({
+            "time": datetime.now().strftime("%H:%M:%S"),
+            "message": message,
+            "type": event_type
+        })
+        if len(server_events) > 50:
+            server_events.pop(0)
 
 
 def discover_local_ipv4() -> str:
@@ -91,7 +104,9 @@ def set_status(payload: dict[str, Any]) -> None:
 
 def get_status() -> dict[str, Any]:
     with state_lock:
-        return dict(latest_status)
+        status = dict(latest_status)
+        status["events"] = list(server_events)
+        return status
 
 
 def prune_recent_faces(now_ts: float, recent_seconds: float) -> None:
@@ -413,6 +428,7 @@ def webcam_loop(args: argparse.Namespace) -> None:
                     face_base64 = base64.b64encode(crop_bytes).decode("ascii")
 
                     if status == "unknown":
+                        add_server_event("Encoding unknown face crop to Base64...", "upload")
                         created_row, create_error = try_create_unknown_face(
                             cache,
                             encoding=detection_embedding,
@@ -421,6 +437,7 @@ def webcam_loop(args: argparse.Namespace) -> None:
                             description=None,
                         )
                         if created_row is not None:
+                            add_server_event(f"Successfully sent 'unidentified' to Supabase. ID: {created_row.get('id')}", "upload")
                             description = None
                             if args.gemini_api_key:
                                 try:
@@ -451,11 +468,14 @@ def webcam_loop(args: argparse.Namespace) -> None:
                     elif status == "matched":
                         # Replace the old image in public.images with the new face_base64
                         match_info = detection.get("match")
+                        display_name = match_info.get("display_name") or "matched"
+                        add_server_event(f"Person detected: {display_name}", "detection")
                         if match_info and match_info.get("photo_url"):
                             old_url = match_info["photo_url"]
                             img_rec = cache.find_image_by_url(image_url=old_url)
                             if img_rec:
                                 try:
+                                    add_server_event(f"Updating Supabase image for {display_name}...", "upload")
                                     cache.update_image_by_id(image_id=img_rec["id"], image_base64=face_base64)
                                 except Exception as exc:
                                     detection["update_error"] = str(exc)
@@ -553,7 +573,7 @@ def index() -> str:
         if (logEl.children.length > 50) logEl.removeChild(logEl.lastChild);
       }
 
-      let lastSeenFaces = new Set();
+      let lastSeenEventsCount = 0;
 
       async function poll() {
         try {
@@ -564,19 +584,23 @@ def index() -> str:
           stats.faces.textContent = data.known_faces_count;
           stats.metric.textContent = data.metric.toUpperCase();
           
+          // Add server-side events
+          if (data.events && data.events.length > lastSeenEventsCount) {
+             const newEvents = data.events.slice(lastSeenEventsCount);
+             newEvents.forEach(ev => addLog(ev.message, ev.type));
+             lastSeenEventsCount = data.events.length;
+          }
+
           if (data.detections && data.detections.length > 0) {
             data.detections.forEach(det => {
               const name = det.match ? (det.match.display_name || det.match.person_name) : 'unknown';
               if (det.status === 'matched') {
                 stats.match.textContent = name;
-                addLog(`Person detected: ${name} (dist: ${det.distance.toFixed(3)})`, 'detection');
-              } else if (det.status === 'created' || det.status === 'unknown') {
-                addLog(`New/Unknown person detected. Syncing to Supabase...`, 'upload');
               }
             });
           }
         } catch (e) {
-          addLog('Failed to fetch telemetry: ' + e.message, 'system');
+          console.error('Telemetry error:', e);
         }
       }
 
@@ -585,7 +609,6 @@ def index() -> str:
       
       // Get IP on load
       fetch('/healthz').then(r => r.json()).then(d => {
-         // Simple heuristic to get host
          stats.ip.textContent = location.host;
       });
     </script>
@@ -632,7 +655,7 @@ def main() -> int:
     parser.add_argument("--api-key", required=True, help="Supabase service or publishable key")
     parser.add_argument("--table-name", default="known_faces", help="Supabase known faces table")
     parser.add_argument("--metric", choices=("euclidean", "cosine"), default="euclidean")
-    parser.add_argument("--threshold", type=float, default=0.6)
+    parser.add_argument("--threshold", type=float, default=0.55)
     parser.add_argument("--refresh-seconds", type=int, default=60)
     parser.add_argument("--save-dir", default="received_faces_local")
     parser.add_argument("--save-cooldown", type=float, default=10.0)
@@ -640,8 +663,8 @@ def main() -> int:
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--fps", type=float, default=5.0)
     parser.add_argument("--jpeg-quality", type=int, default=70)
-    parser.add_argument("--recent-distance", type=float, default=0.25)
-    parser.add_argument("--recent-seconds", type=float, default=45.0)
+    parser.add_argument("--recent-distance", type=float, default=0.20)
+    parser.add_argument("--recent-seconds", type=float, default=90.0)
     parser.add_argument("--process-every-n", type=int, default=3)
     parser.add_argument("--detect-scale", type=float, default=0.25)
     parser.add_argument("--gemini-api-key", default="")
