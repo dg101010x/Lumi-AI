@@ -198,6 +198,19 @@ class SupabaseKnownFacesCache:
             raise RuntimeError("Supabase image insert returned no row")
         return dict(rows[0])
 
+    def find_image_by_id(self, *, image_id: int, table_name: str = DEFAULT_IMAGES_TABLE_NAME) -> dict[str, Any] | None:
+        resp = requests.get(
+            f"{self.project_url.rstrip('/')}/rest/v1/{table_name}",
+            headers=build_headers(self.api_key),
+            params={"select": "id,image_name,image_url", "id": f"eq.{image_id}"},
+            timeout=self.timeout_seconds,
+        )
+        resp.raise_for_status()
+        rows = resp.json()
+        if isinstance(rows, list) and rows:
+            return dict(rows[0])
+        return None
+
     def find_image_by_url(self, *, image_url: str, table_name: str = DEFAULT_IMAGES_TABLE_NAME) -> dict[str, Any] | None:
         # Query images where image_url equals provided value
         resp = requests.get(

@@ -531,15 +531,28 @@ def get_known_faces():
     payload = []
     for f in faces:
         photo_url = f.get("photo_url") or ""
-        img_src = photo_url
-        if photo_url and not photo_url.startswith(("http", "data:", "file:")):
-            img_src = f"data:image/jpeg;base64,{photo_url}"
-        
+        img_src = ""
+
+        if photo_url.isdigit():
+            # photo_url stores the Supabase images.id — fetch real base64
+            try:
+                img_row = cache.find_image_by_id(image_id=int(photo_url))
+                if img_row:
+                    b64 = img_row.get("image_url") or ""
+                    if b64:
+                        img_src = f"data:image/jpeg;base64,{b64}"
+            except Exception:
+                pass
+        elif photo_url.startswith("data:"):
+            img_src = photo_url
+        elif photo_url.startswith("http"):
+            img_src = photo_url
+
         payload.append({
             "id": f.get("id"),
             "name": f.get("display_name"),
             "date": f.get("last_seen_at") or f.get("created_at"),
-            "src": img_src
+            "src": img_src,
         })
     payload.sort(key=lambda x: x["date"] or "", reverse=True)
     return jsonify(payload)
