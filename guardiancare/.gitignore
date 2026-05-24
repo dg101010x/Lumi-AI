@@ -1,3 +1,8 @@
+<<<<<<< HEAD
+.env
+__pycache__/
+*.jpg
+=======
 # macOS
 .DS_Store
 
@@ -15,8 +20,4 @@ out/
 
 # Claude Code local state
 .claude/
-
-# Python Core Tracking Backend
-guardiancare/.env
-guardiancare/__pycache__/
-guardiancare/*.jpg
+>>>>>>> f06b74255e9b224e7865dcb634e21a75ef3b7a62
