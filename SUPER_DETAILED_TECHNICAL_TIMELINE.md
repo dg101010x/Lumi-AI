@@ -1,136 +1,229 @@
 # Lumi AI Super Detailed Technical Timeline
 
-This file is a technical timeline, not a general retrospective.
+This file is a chronological technical timeline by event and timestamp.
 
-It is ordered primarily by timestamp and secondarily by branch context. The goal
-is to reconstruct what the repo was technically becoming throughout the day.
+It is not a general retrospective and it is not organized by topic first. The
+goal here is to reconstruct the day in order:
 
-This timeline is based on:
+- what happened
+- when it happened
+- what branch or source it came from
+- what changed in code at that moment
+- what that change meant technically
+- what problem was still unresolved after that event
+
+This timeline is built from:
 
 - exact git commit timestamps
-- branch heads and merged branch graph
-- diff contents, not just commit titles
-- the Discord export timeline from the event day
+- branch heads and merged history
+- diff contents
+- Discord timestamps from the downloaded export
 
-## Source anchors used for this timeline
+## Branch key used in this timeline
 
-### Git timeline anchor
+- `main`: product shell, fall-detection import, later merge/preservation branch
+- `raw-limelight-feed`: Pi stream / preview / tunnel branch
+- `windows-face-supabase-match`: Windows webcam + Supabase branch
+- `pi-limelight-orchestrator`: later branch carrying final dashboard/sync hardening
+- `openpose-pose-integration`: exploration branch with stash evidence
 
-The relevant development window is concentrated on **May 23, 2026** from:
+---
 
-- `11:17:19 AM` local: `f5c4e7d` Initial commit
-- through `5:57:38 PM` local: `9484893` final major code hardening commit
+## Saturday, May 23, 2026
 
-Later commits on the evening of May 23 and the morning of May 24 are mainly:
+### 10:26 AM — Discord — Track and idea positioning starts
 
-- merges
-- preservation
-- documentation
+**Source:** Discord export  
+**Messages around this time:**
 
-### Discord anchor
+- `about these tracks`
+- `and any ideas they might have`
 
-The Discord export provides event-side timing for idea changes and handoffs:
+### What this means technically
 
-- `10:26 AM` track/idea discussion
-- `10:34–10:36 AM` “canvas idea” rejection and hardware debate
-- `10:37 AM` “recognize falls and remind you stuff”
-- `11:34 AM` FamiliarAI link shared
-- `1:20 PM` and `1:48 PM` public preview links shared
-- `3:48 PM` OpenPose link shared
-- `4:21 PM` med schedule shared
-- `4:37 PM` technical summary shared
-- `5:08 PM` `guardiancare.zip` shared
+At this point there is no meaningful code yet, but the team is already thinking
+about how the project will need to fit the hackathon judging environment.
 
-Those timestamps matter because they let us align:
+This matters because the later repo shape only makes sense if you realize the
+team was optimizing for:
 
-- idea changes
-- proof-of-concept changes
-- public preview work
-- late fall-detection handoff work
+- demo impact
+- technical differentiation
+- not just correctness
 
-## 1. Branch map before reading the timeline
+### What is not decided yet
 
-To understand the chronology, the branch meanings have to be clear first.
+- whether the project will be hardware-heavy or software-only
+- what exact perception backbone will be used
+- how much of the product will be room sensing vs caregiver UI
 
-### `main`
+---
 
-`main` starts as the product shell and later becomes the merge/preservation
-branch. It is not the branch where all the experimentation happened in real
-time.
+### 10:34 AM — Discord — The earlier non-hardware direction gets rejected
 
-### `raw-limelight-feed`
+**Source:** Discord export  
+**Messages around this time:**
 
-This branch is the **Pi preview / public stream** branch.
+- `can we not do the canvas idea?`
+- `Clunky school interface`
+- `no hardware component`
 
-Key technical themes:
+### What this means technically
 
-- Limelight stream access
-- browser preview bridge
-- localtunnel/ngrok service support
-- early sender/receiver split
+This is the first strong architecture-shaping decision of the day even though no
+commit exists yet.
 
-### `windows-face-supabase-match`
+The team is explicitly moving away from a purely interface-centric idea and
+toward something that includes real sensing or hardware interaction.
 
-This branch is the **Windows fallback / identity / Supabase** branch.
+### Why this matters later
 
-Key technical themes:
+The repo’s eventual complexity comes directly from this choice. A non-hardware
+idea would not have forced:
 
-- webcam-based recognition
-- Supabase integration
-- live local dashboard
-- browser preview
-- face update and gallery correctness
+- camera IO
+- Limelight integration
+- tunnel/public preview issues
+- Pi vs Windows fallback tradeoffs
 
-### `pi-limelight-orchestrator`
+---
 
-Despite the name, this branch ends up containing the **latest face-sync and
-dashboard hardening work** by the time it is merged.
+### 10:35–10:36 AM — Discord — Hardware becomes a differentiation strategy
 
-Key technical themes:
+**Source:** Discord export  
+**Messages around this time:**
 
-- final Supabase update fixes
-- dashboard entirely backed by Supabase
-- image-row id semantics
+- `there's barely anyone with hardware`
+- `And is hardware a requirement`
+- `no`
+- `but its how we win`
 
-### `openpose-pose-integration`
+### What this means technically
 
-This is an **exploration branch** with evidence of live experimentation rather
-than a fully landed committed implementation.
+The team is explicitly deciding that hardware is not mandatory but could be a
+competitive advantage.
 
-Evidence:
+### Technical implication
 
-- branch pointer at `63b6a42`
-- stash entry at `2:52:27 PM`
+This is a crucial constraint for the rest of the day:
 
-## 2. Chronological technical timeline
+- the team wants hardware for differentiation
+- but because it is optional, they also need a fallback if the hardware path
+  becomes too fragile
 
-## 11:17:19 AM — `f5c4e7d` — `main`
+That exact tension is what later creates the Pi branch and the Windows fallback
+branch in parallel.
+
+---
+
+### 10:37 AM — Discord — The core product behavior gets stated clearly
+
+**Source:** Discord export  
+**Messages around this time:**
+
+- `R we going with ur earlier idea?`
+- `So it will recognize falls and remind you stuff`
+
+### What this means technically
+
+This is the first compact functional definition of Lumi AI.
+
+From a systems perspective, that sentence already implies at least three
+subsystems:
+
+1. fall/perception logic
+2. identity or resident-state awareness
+3. reminder or interaction logic
+
+### Why this matters
+
+The final repo looks broad because the product was broad from this exact moment,
+not because the team lost focus later.
+
+---
+
+### 10:43 AM — Discord — Care experience expands beyond pure detection
+
+**Source:** Discord export  
+**Messages around this time:**
+
+- discussion about adding music/games/entertainment
+
+### What this means technically
+
+The product scope is not just:
+
+- detect emergency
+
+It also includes:
+
+- daily-use comfort interactions
+- companionship-style assistance
+
+This explains why later files include:
+
+- caregiver app scaffolds
+- Gemini prompts
+- med/reminder language
+
+instead of only emergency detection scripts.
+
+---
+
+### 11:17:19 AM — Git — `f5c4e7d` — Initial commit lands on `main`
 
 **Commit:** `f5c4e7d`  
+**Branch context:** `main`  
 **Message:** `Initial commit`
 
-### What existed technically
+### Technical event
 
-- almost nothing yet beyond the repository skeleton
+The repository is created in usable form.
 
-### What this means
+### What exists technically right after this
 
-At this time, there is no meaningful split between:
+- almost no product logic
+- no defined hardware subsystem
+- no defined preview subsystem
+- no defined backend/identity subsystem
 
-- caregiver app
-- perception stack
-- face recognition
-- fall detection
-- cloud/backend wiring
+### Technical significance
 
-This is the zero point of the technical timeline.
+This is the zero point for the code timeline. Everything else in the repo is
+same-day acceleration layered on top of this.
 
-## 12:45:14 PM — `3a3f618` — `main`
+---
+
+### 11:34 AM — Discord — FamiliarAI reference enters the conversation
+
+**Source:** Discord export  
+**Message:** FamiliarAI link shared
+
+### What this means technically
+
+By `11:34 AM`, the team is already referencing an existing face-recognition
+style implementation as inspiration or comparison.
+
+### Why this matters
+
+This reference shows that recognition was not being invented from scratch in a
+vacuum. The team was actively comparing against an existing architecture for:
+
+- face detection
+- face matching
+- “known vs unknown” logic
+
+This becomes important later when the Windows/Supabase path is built.
+
+---
+
+### 12:45:14 PM — Git — `3a3f618` — The first real Pi/Limelight scaffold lands
 
 **Commit:** `3a3f618`  
+**Branch context:** `main`  
 **Message:** `Add Raspberry Pi Limelight viewer scaffold`
 
-### Files added
+### Files introduced
 
 - `pi/limelight_probe.py`
 - `pi/limelight_video_viewer.py`
@@ -139,559 +232,663 @@ This is the zero point of the technical timeline.
 - `README.md`
 - `codex.md`
 
-### Technical meaning
+### Technical event
 
-This is the first serious implementation commit.
+This is the first moment the project becomes a real hardware/software build and
+not just a concept.
 
-The code focus is:
+### What the code is doing
 
-- can the Pi find the Limelight
-- can it probe endpoints
-- can it open the stream directly
+- probing Limelight endpoints
+- trying stream paths
+- opening raw stream data in OpenCV
 
-### What the diff suggests about priorities
+### Technical reading
 
-The project at this moment is still assuming:
+The Pi path is still very direct and local:
 
-- hardware proof first
-- browser/UI later
-- identity/backend later
+- no browser serving yet
+- no public preview yet
+- no backend state
+- no face/identity persistence
 
-The presence of the early Gemini prompt file shows that AI-conversation context
-was already part of the product story, but not yet the engineering bottleneck.
+This is a hardware access proof phase.
 
-### What is still absent
+### What is still missing after this event
 
-- no web preview
-- no public shareability
-- no Supabase face path
-- no fall-detection runtime
+- shareable preview
+- public reachability
+- Windows fallback
+- Supabase identity
+- integrated fall detection
 
-## 12:45:28 PM — `a4c9fa3` — `main`
+---
+
+### 12:45:28 PM — Git — `a4c9fa3` — Repo hygiene correction after the first scaffold
 
 **Commit:** `a4c9fa3`  
+**Branch context:** `main`  
 **Message:** `Ignore Python cache files`
+
+### Technical event
+
+A compiled Python cache artifact is removed/ignored.
 
 ### Technical meaning
 
-This is a repo hygiene correction immediately after the Pi scaffold landed.
+This is small, but it shows the pace of the first implementation pass:
 
-### What it reveals
+- code was being run immediately
+- generated artifacts were entering the repo
+- cleanup followed right after
 
-The first Pi work was moving fast enough that compiled cache artifacts were
-committed before cleanup. This is minor technically, but it confirms the early
-phase was fast, direct, and local-script driven.
+It is a typical same-day hackathon signal: the first objective was to make
+things run, then clean up after.
 
-## 1:07:07 PM — `a220cf9` — `main`
+---
+
+### 1:07:07 PM — Git — `a220cf9` — Stream access becomes browser preview
 
 **Commit:** `a220cf9`  
+**Branch context:** `main`  
 **Message:** `Add public Limelight web preview bridge`
 
-### Files added or materially changed
+### Files introduced or changed
 
 - `pi/limelight_web_preview.py`
 - `pi/limelight_video_viewer.py`
-- `README.md`
 
-### Technical meaning
+### Technical event
 
-This is the first pivot from:
+The project moves from:
 
-- “open the stream locally”
+- raw local stream opening
 
 to:
 
-- “serve the stream to a browser”
+- local browser preview via an HTTP bridge
 
-The preview bridge makes the feed accessible through:
+### What changed in code
 
-- a root page
-- a proxied MJPEG endpoint
-- health-style endpoints
+- a preview server exists now
+- MJPEG is proxied to a web route
+- a root page and stream endpoint become part of the runtime surface
 
-### Why this matters
+### Technical meaning
 
-This commit is where the project stops being only a dev-side camera tool and
-starts becoming a demo surface.
+This is the first move from “developer proof” to “demo surface.”
 
-### What is still missing
+### What is still missing after this event
 
-- no persistent public route
-- no cloud host path
-- no identity layer
+- no durable public route
+- no cloud-friendly upstream solution
+- no face identity pipeline
 
-## 1:11:45 PM — `63b6a42` — `main`, later branch base for `raw-limelight-feed` and `openpose-pose-integration`
+---
+
+### 1:11:45 PM — Git — `63b6a42` — Cloud Run preparation appears
 
 **Commit:** `63b6a42`  
+**Branch context:** `main`, later the base for `raw-limelight-feed` and `openpose-pose-integration`  
 **Message:** `Prepare Limelight preview for Cloud Run`
 
-### Files added or changed
+### Files introduced
 
 - `Dockerfile`
 - `.dockerignore`
-- `pi/limelight_web_preview.py`
-- `pi/limelight_video_viewer.py`
+
+### Technical event
+
+The preview path is reshaped into something that can theoretically be deployed.
+
+### What changed technically
+
+- preview app becomes more container-compatible
+- runtime starts respecting deployment-style port behavior
 
 ### Technical meaning
 
-This commit tries to convert the local preview path into something cloud-hostable.
+By `1:11 PM`, the problem has already shifted from:
 
-The preview app is made more compatible with:
+- “can the Pi read the stream”
 
-- `$PORT`
-- container execution
-- deployment assumptions
+to:
 
-### What this implies technically
+- “can this be hosted or made available somewhere useful”
 
-By `1:11 PM`, the team is already confronting the question:
+### Why this timestamp matters
 
-> how do we let other people see the video
+This commit becomes a branch base. That means the code state at `1:11 PM`
+captures the point before the repo splits into:
 
-This is a system-architecture question, not a perception question.
+- the raw preview/tunnel line
+- the OpenPose exploration line
+- the later Windows-heavy recognition line
 
-### Why this branch point matters
+---
 
-This commit becomes the base for:
+### 1:20 PM — Discord — First public stream URL is shared
 
-- `raw-limelight-feed`
-- `openpose-pose-integration`
+**Source:** Discord export  
+**Message:** `https://calm-crabs-relate.loca.lt/stream.mjpg`
 
-So the later history is effectively diverging here:
+### Technical event
 
-- one path pushes harder on preview/accessibility
-- one path later experiments with OpenPose
-
-## 1:20 PM — Discord preview checkpoint
-
-**Discord:** `https://calm-crabs-relate.loca.lt/stream.mjpg`
+A shareable public stream URL exists and is being passed around live.
 
 ### Technical meaning
 
-This is the first clear evidence that the preview/public-sharing work is not
-just theoretical. A shareable tunnel-backed stream URL existed and was being
-sent around.
+The tunnel/public-preview problem is no longer abstract. The team has an actual
+end-to-end path:
 
-This closely matches the preview/tunnel work that continues in the next commit.
+- local camera source
+- local preview server
+- tunnel
+- publicly reachable URL
 
-## 1:27:25 PM — `c9e0f2f` — `main`
+### What is still unresolved
+
+- whether the tunnel is stable
+- whether the source stays reachable
+- whether this can be productionized or only demoed
+
+---
+
+### 1:27:25 PM — Git — `c9e0f2f` — Preview and tunnel get operational support
 
 **Commit:** `c9e0f2f`  
+**Branch context:** `main`  
 **Message:** `Add managed services for Limelight preview tunnel`
 
-### Files added
+### Files introduced
 
 - `deploy/systemd/aegis-preview.service`
 - `deploy/systemd/aegis-localtunnel.service`
 - `scripts/install_user_services.sh`
 - `scripts/localtunnel-watch.sh`
 
+### Technical event
+
+The preview/tunnel path gets turned into a more self-maintaining subsystem.
+
+### What changed technically
+
+- user services can keep the preview path alive
+- tunnel management becomes scripted
+
 ### Technical meaning
 
-This is an operationalization commit, not a model or product commit.
+At this point, the preview system is already being treated like an operational
+dependency, not just a helper script.
 
-It means the team already encountered a practical problem:
+### What this says about the day
 
-- a preview server that works once is not enough
-- a tunnel that dies is not demoable
+The team had learned very quickly that a working preview was not enough. It had
+to survive repeated launches and demo pressure.
 
-### What the code is doing
+---
 
-It creates:
+### 1:48 PM and 1:56 PM — Discord — More public preview links are shared
 
-- keepalive service logic
-- auto-start behavior
-- tunnel watcher mechanics
-
-### What was still not solved
-
-- upstream camera reachability from true cloud services
-- recognition
-- state/backend logic
-
-## 1:48 PM and 1:56 PM — Discord preview checkpoint
-
-**Discord:**
+**Source:** Discord export  
+**Messages:**
 
 - `https://puny-houses-rest.loca.lt/`
-- link repeated a few minutes later
+- same preview link re-shared a few minutes later
+
+### Technical event
+
+Public preview sharing is still actively being tested and circulated.
 
 ### Technical meaning
 
-By now, the stream/public link issue has become a recurring live concern. The
-same preview URL being re-shared suggests the team was actively validating the
-shareable path in real time.
+This suggests:
 
-## 2:50:58 PM — `7aeebc1` — `origin/raw-limelight-feed`
+- the preview path was considered central enough to keep checking
+- URL reachability/stability was still a live concern
+
+This phase is still about:
+
+- video visibility
+
+not yet:
+
+- identity correctness
+
+---
+
+### 2:50:58 PM — Git — `7aeebc1` — The sender/receiver architecture appears on `raw-limelight-feed`
 
 **Commit:** `7aeebc1`  
+**Branch context:** `origin/raw-limelight-feed`  
 **Message:** `Add webcam face sender and ngrok service`
 
-### Files added or changed
+### Files introduced or changed
 
 - `pi/face_capture_sender.py`
 - `windows/face_receiver.py`
 - `deploy/systemd/aegis-ngrok.service`
 - `scripts/ngrok-watch.sh`
 - `pi/limelight_web_preview.py`
-- `requirements-face.txt`
-- `requirements-windows.txt`
+
+### Technical event
+
+The project no longer treats the Pi as only a preview device.
+
+A new architectural split appears:
+
+- Pi can capture or forward face-related data
+- Windows can receive/process it
 
 ### Technical meaning
 
-This is the first major architectural split.
-
-The project is no longer just:
-
-- Pi shows stream
-
-It is becoming:
-
-- Pi captures or forwards face data
-- another machine can receive/process/store it
+This is the first true distributed architecture moment in the repo.
 
 ### Why this matters
 
-This is the point where a distributed architecture starts to form:
+From here on, the project is not locked into “all intelligence runs on the Pi.”
 
-- edge device
-- receiver machine
-- backend identity/store layer still to come
+### What remains unsolved after this event
 
-### Branch-specific importance
+- Supabase identity path is not yet mature
+- live dashboard is not yet hardened
+- duplicate/update semantics are still absent
 
-This is the last committed point on `origin/raw-limelight-feed`, which means the
-raw branch stabilizes as:
+---
 
-- preview
-- tunnel
-- sender/receiver bridge
+### 2:52:27 PM — Git stash — `openpose-pose-integration` active experimentation
 
-but does not continue into the full Supabase-heavy hardening path.
+**Source:** git stash / branch evidence  
+**Evidence:** `stash@{0}: On openpose-pose-integration: wip openpose overlay`
 
-## 2:52:27 PM — `openpose-pose-integration` stash evidence
+### Technical event
 
-**Stash evidence:**
-
-- `stash@{0}: On openpose-pose-integration: wip openpose overlay`
+OpenPose work was happening live enough to produce a stash, even though it did
+not land as a normal branch head commit.
 
 ### Technical meaning
 
-This is not a landed commit, but it matters a lot.
+This proves a parallel exploration was happening:
 
-It means that by `2:52 PM`:
+- preview/public path work was underway
+- sender/receiver architecture had appeared
+- and a stronger pose/perception route was still being explored
 
-- OpenPose was not just an idea
-- there was active, uncommitted exploratory work for overlay/integration
+### Why this matters
 
-### Why this matters for the timeline
+The later fall-detection and pose work was not an afterthought. It was a real
+same-day parallel effort.
 
-It shows a branch of work that never fully reached committed branch-head status
-but was still part of the real engineering effort.
+---
 
-## 3:46:09 PM — `04927dd` — `windows-face-supabase-match`
+### 3:46:09 PM — Git — `04927dd` — The Windows fallback becomes a real full-stack runtime
 
 **Commit:** `04927dd`  
+**Branch context:** `windows-face-supabase-match`  
 **Message:** `Add Windows face matching and LumiAI launcher`
 
-### Files added
+### Files introduced
 
 - `windows/face_matching.py`
-- `windows/face_receiver.py`
+- `windows/supabase_known_faces.py`
 - `windows/webcam_supabase_live.py`
 - `windows/webcam_supabase_match.py`
-- `windows/supabase_known_faces.py`
 - `windows/lumiai.ps1`
 - `scripts/install_lumiai_command.ps1`
-- Windows requirements files
+
+### Technical event
+
+This is the biggest architecture pivot in the repo.
+
+The project now has a real Windows-only fallback that can potentially handle:
+
+- webcam capture
+- face detection/embedding
+- Supabase matching
+- local browser preview
+- launch ergonomics
 
 ### Technical meaning
 
-This is the biggest architectural pivot of the day.
+At this exact time, the repo stops being primarily “Pi preview plus ideas” and
+becomes “two competing runtime centers”:
 
-At this point, the project gains a true Windows-only fallback that can do:
+- Pi/Limelight path
+- Windows webcam path
 
-- camera capture
-- face embedding generation
-- preview
-- matching
-- backend sync
-- operator launch ergonomics
+### What remains unresolved after this event
 
-### Why this happened
+- live view stability
+- unknown naming conventions
+- image transport semantics
+- matched-face update path
 
-The diff size and scope strongly suggest a change in risk posture:
+---
 
-- the Pi path was no longer trusted as the only demo center
-- Windows became the environment where faster iteration was possible
+### 3:48 PM — Discord — OpenPose shared explicitly
 
-### Branch-specific importance
+**Source:** Discord export  
+**Message:** OpenPose GitHub link
 
-From this point onward, `windows-face-supabase-match` becomes the most rapidly
-iterated branch in the repo.
+### Technical event
 
-## 3:48 PM — Discord OpenPose checkpoint
-
-**Discord:** OpenPose GitHub link shared
+The team explicitly shares OpenPose after the Windows fallback already exists.
 
 ### Technical meaning
 
-This proves that even after the Windows fallback architecture existed, the team
-was still actively looking for stronger pose/fall/perception routes.
+This confirms that the project did not pivot away from perception exploration
+when the Windows path appeared. Both were happening in parallel:
 
-That means the fallback pivot did not kill perception exploration. Both were
-happening in parallel.
+- fallback runtime hardening
+- pose/fall/perception exploration
 
-## 4:11:40 PM — `8e963d5` — `windows-face-supabase-match`
+---
+
+### 4:11:40 PM — Git — `8e963d5` — The Windows live runtime gets re-architected for usability
 
 **Commit:** `8e963d5`  
+**Branch context:** `windows-face-supabase-match`  
 **Message:** `fix(windows): resolve live view issues by adding missing dependencies and updating configuration`
 
-### Files changed
+### Technical event
 
-- `windows/webcam_supabase_live.py`
-- `windows/lumiai.ps1`
-- `scripts/install_lumiai_command.ps1`
+The first Windows live runtime proved too weak or awkward in practice, so it
+gets a substantial redesign.
 
-### What the diff actually changed
-
-This is not a tiny fix. It is a substantial runtime redesign:
+### What the diff actually changes
 
 - local IPv4 discovery
-- explicit JPEG byte generation helper
-- file-serving route for saved images
-- frame reuse between processing passes
-- `--process-every-n`
-- `--detect-scale`
-- faster stream cadence
-- LAN image base URL generation
-- optional Gemini description + speaker prompt support
+- JPEG helper functions
+- `/images/<filename>` serving
+- frame reuse across processing cycles
+- stream cadence increased
+- detection cadence separated with `--process-every-n`
+- detection cost reduced with `--detect-scale`
+- Gemini description + speaker prompt hooks
 
 ### Technical meaning
 
-The first version of the live view existed, but it was not good enough.
+This is not a cosmetic fix. It is the moment the Windows runtime starts being
+tuned for:
 
-This commit says the earlier Windows live stack suffered from:
+- lower latency
+- better operator ergonomics
+- easier LAN access from other devices
 
-- lag
-- over-processing
-- weak image accessibility from other laptops
-- too much coupling between recognition and preview freshness
+### What this reveals
 
-### Why this matters in the timeline
+The first Windows runtime existed, but it was not yet fit for repeated demo use.
 
-This is the moment the Windows path stops being merely “possible” and starts
-becoming “tuned for demo use.”
+---
 
-## 4:12:05 PM — `cf5dd81` — `windows-face-supabase-match`
+### 4:12:05 PM — Git — `cf5dd81` — Unknown naming gets standardized
 
 **Commit:** `cf5dd81`  
+**Branch context:** `windows-face-supabase-match`  
 **Message:** `fix(windows): set default unknown person name to 'unidentified'`
 
+### Technical event
+
+The project tightens its identity semantics immediately after the larger runtime
+fix.
+
 ### Technical meaning
 
-This is a semantic cleanup immediately after the larger runtime fix.
+This is a sign that:
 
-It tells us that identity naming conventions were still unstable right after the
-fallback path was created.
+- the fallback architecture existed
+- but the data semantics still needed cleanup
 
-## 4:18:38 PM — `3c07a54` — `windows-face-supabase-match`
+It is small in code but important in meaning.
+
+---
+
+### 4:18:38 PM — Git — `3c07a54` — Direct Supabase insert testing becomes necessary
 
 **Commit:** `3c07a54`  
+**Branch context:** `windows-face-supabase-match`  
 **Message:** `Add Supabase test face insert script`
 
-### Technical meaning
+### Technical event
 
-This commit exists because backend uncertainty had become a real blocker.
-
-The team needed a direct proof path for:
-
-- key validity
-- row shape validity
-- insertion success/failure
-
-### What this implies
-
-By this time, “is the app wrong” and “is Supabase rejecting the payload” had
-become separate questions that needed separate tooling.
-
-## 4:21 PM — Discord medication checkpoint
-
-**Discord:** med schedule shared
+The team creates a direct probe for backend correctness.
 
 ### Technical meaning
 
-Even while face/sync/preview debugging was happening, the product was still
-receiving actual care-domain input. The product scope had not collapsed down to
-“just camera.” The room assistant narrative was still active.
+The system now has enough moving parts that a live app failure could mean:
 
-## 4:22:17 PM — `c3d7038` — `main`
+- bad app logic
+- bad key
+- wrong row shape
+- wrong table assumptions
+- RLS rejection
+
+This script exists to isolate those.
+
+---
+
+### 4:21 PM — Discord — Real med schedule arrives
+
+**Source:** Discord export  
+**Messages:** Amlodipine, Lisinopril, Metformin, Simvastatin schedule
+
+### Technical event
+
+Care-domain data is being integrated while the engineering stack is still being
+debugged.
+
+### Technical meaning
+
+The room-assistant product scope stays alive throughout the implementation
+chaos. The project did not collapse into only camera work.
+
+---
+
+### 4:22:17 PM — Git — `c3d7038` — Caregiver iOS/web shell lands on `main`
 
 **Commit:** `c3d7038`  
+**Branch context:** `main`  
 **Message:** `Add SwiftUI iOS app and bootstrap Next.js onboarding web app`
 
-### Technical meaning
+### Technical event
 
-This commit lands on `main` while the Windows fallback branch is already active.
-
-That is important.
-
-It means the codebase was truly developing in parallel:
-
-- one line was hardening runtime/video/recognition
-- another line was building the caregiver-facing shell
-
-### Technical implication
-
-This is not a neat product progression. It is a real hackathon progression:
-
-- user-facing app scaffolds and core perception plumbing are being built in
-  parallel because both are needed for a convincing demo.
-
-## 4:24–4:26 PM — Discord pitch checkpoint
-
-**Discord:** “Master hackathon pitch deck creator” prompt appears
+The caregiver-facing app layer is built in parallel with the perception and
+fallback runtime work.
 
 ### Technical meaning
 
-By this point, the team was already compressing the architecture into pitch
-language while the code was still being changed quickly.
+This shows the repo developing on two tracks at once:
 
-This matters because later code changes have to be read in the context of:
+- product-facing shell
+- runtime/perception/identity plumbing
 
-- not just correctness
-- but what could be said confidently in front of judges
+### Why this matters
 
-## 4:31:29 PM — `b4cff0d` — `windows-face-supabase-match`
+The hackathon story is not “first backend then frontend” or “first hardware then
+app.” It is parallel construction because both were needed for the final story.
+
+---
+
+### 4:24–4:26 PM — Discord — Pitch framing gets refined while engineering continues
+
+**Source:** Discord export  
+**Message:** “Master hackathon pitch deck creator” style request
+
+### Technical event
+
+The team starts compressing the architecture into technical pitch language while
+runtime fixes are still landing.
+
+### Technical meaning
+
+This creates an important constraint:
+
+- the code has to keep evolving
+- but the team also has to know how to explain it coherently in real time
+
+---
+
+### 4:31:29 PM — Git — `b4cff0d` — Image transport pivots toward base64
 
 **Commit:** `b4cff0d`  
+**Branch context:** `windows-face-supabase-match`  
 **Message:** `Add base64 face upload flow and harden secret hygiene`
 
-### Files added or changed
+### Files introduced or changed
 
 - `windows/face_receiver.py`
 - `windows/send_first_face_base64.py`
-- `.gitignore`
+
+### Technical event
+
+The project changes how images move through the system.
 
 ### Technical meaning
 
-This is a transport-layer pivot.
+The transport problem is now explicit. The team is moving away from relying only
+on:
 
-The system is shifting from:
+- local file paths
+- or multipart-only assumptions
 
-- file-path-oriented / multipart assumptions
+and toward:
 
-toward:
-
-- JSON + base64 image payloads
+- JSON + base64 payloads
 
 ### Why this matters
 
-This is one of the first big clues that image transport itself had become a
-technical problem worth redesigning.
+This is the start of the backend image-semantics story that continues through
+multiple later fixes.
 
-### Problem class revealed
+---
 
-- local file URIs are easy to create
-- but they are bad universal transport
-- base64 is ugly but robust for quick backend/database moves
+### 4:37:53 PM — Discord — Live technical self-assessment captures a real limitation
 
-## 4:37:53 PM — Discord technical summary checkpoint
+**Source:** Discord export  
+**Message:** detailed technical summary
 
-**Discord:** detailed technical summary shared
+### Technical event
 
-### Technical meaning
+The stack is summarized live as:
 
-This is one of the most valuable timeline anchors because it captures a live
-technical self-assessment at the time.
-
-It says the stack was:
-
-- Raspberry Pi + Windows webcam
+- edge CV
+- Raspberry Pi + Windows webcam path
 - `face_recognition`
 - Supabase `known_faces`
-- MJPEG over Flask
+- MJPEG preview over Flask
 - unknown auto-insert
-- Gemini-assisted naming prompts
+- Gemini naming support
 
-It also points out a real limitation at that exact time:
+### Crucial technical note in that message
 
-> matched users were not yet getting their most recent image updated correctly
+The summary explicitly says matched known faces were not yet getting their latest
+image updated correctly.
 
-This matters because the subsequent commits directly attack that limitation.
+### Why this matters
 
-## 4:47:51 PM — `eb9bc05` — `windows-face-supabase-match`
+This gives a real-time technical checkpoint that later commits can be judged
+against. It confirms that by `4:37 PM`, the update semantics were still weaker
+for matched faces than for unknown insertions.
+
+---
+
+### 4:47:51 PM — Git — `eb9bc05` — Receiver becomes a visible local surface
 
 **Commit:** `eb9bc05`  
+**Branch context:** `windows-face-supabase-match`  
 **Message:** `Add live local face receiver view`
 
+### Technical event
+
+The receiver gains a better local view and startup support.
+
 ### Technical meaning
 
-This improves operability and observability:
+This is a toolability/observability step:
 
-- startup script
-- richer face receiver page
-- local service ergonomics
+- easier to inspect locally
+- easier to restart
+- easier to use in repeated tests
 
-### Why it matters
+The project is maturing operationally, not just functionally.
 
-By late afternoon, the issue is not just whether the receiver works. It is
-whether the team can inspect and restart it quickly enough during repeated demo
-loops.
+---
 
-## 5:01:02 PM — `2337100` — `windows-face-supabase-match`
+### 5:01:02 PM — Git — `2337100` — Supabase embedding compatibility and browser-camera UX improve
 
 **Commit:** `2337100`  
+**Branch context:** `windows-face-supabase-match`  
 **Message:** `feat(windows): improve face matching and preview with browser-side camera and embedding normalization`
 
-### What the diff actually changed
+### Technical event
 
-- browser camera preview path
-- `/known-faces` JSON route
-- embedding normalization in `supabase_known_faces.py`
-- better image source inference for rendered faces
+The team fixes two quiet but important issues:
+
+1. Supabase embedding values can arrive in inconsistent formats
+2. local preview UX is better if the browser owns the camera feed
+
+### What the diff actually changes
+
+- `normalize_embedding` in `supabase_known_faces.py`
+- browser-camera path in `face_receiver.py`
+- `/known-faces` payload route
+- more robust image source inference
 
 ### Technical meaning
 
-This solves two quiet but serious bugs:
+This is both:
 
-1. embeddings coming back from Supabase could be shaped inconsistently
-2. server-side camera preview was not the best local UX for a laptop
+- a data compatibility fix
+- and a latency/usability fix
 
-### Why it matters
+### What remains unresolved
 
-This is a compatibility and latency commit:
+- image storage semantics
+- matched-face update correctness
+- duplicate suppression
 
-- compatibility for Supabase embedding payload shapes
-- latency/UX improvement by shifting preview to browser media APIs
+---
 
-## 5:08:04 PM — `dd5a198` — `windows-face-supabase-match`
+### 5:08:04 PM — Git — `dd5a198` — Base64 handling gets standardized enough to vendor
 
 **Commit:** `dd5a198`  
+**Branch context:** `windows-face-supabase-match`  
 **Message:** `Add vendored base64 CLI and Python helper`
 
-### Technical meaning
+### Technical event
 
-By this point, base64 handling was important enough to standardize and vendor.
-
-That means the team no longer treated base64 as a temporary hack. It became a
-core transport/storage tool in the current architecture.
-
-## 5:08 PM — Discord late artifact checkpoint
-
-**Discord:** `guardiancare.zip` shared
+Base64 is no longer treated like a temporary workaround. It becomes a first-class
+tool in the repo.
 
 ### Technical meaning
 
-This is the late fall-detection handoff point.
+This commit says:
 
-It means that while the Windows/Supabase path was still actively being hardened,
-another perception/fall bundle was being delivered into the team workflow.
+- image transport/storage is central now
+- encoding behavior needs to be consistent enough to vendor tooling for it
 
-That is one of the strongest pieces of evidence that the project had parallel
-technical centers right up to the end.
+---
 
-## 5:09:32 PM and 5:12:29 PM — `ffa3713`, `f06b742` — `main`
+### 5:08 PM — Discord — `guardiancare.zip` is shared
+
+**Source:** Discord export  
+**Artifact:** `guardiancare.zip`
+
+### Technical event
+
+Late-stage fall-detection work is handed off as an archive.
+
+### Technical meaning
+
+At almost the exact same time as the base64/image/backend work is intensifying,
+fall-detection work is still arriving.
+
+This is one of the strongest pieces of evidence that the project had multiple
+serious technical centers right up to the end.
+
+---
+
+### 5:09:32 PM and 5:12:29 PM — Git — Documentation is being revised while core engineering is still active
 
 **Commits:**
 
@@ -700,475 +897,401 @@ technical centers right up to the end.
 
 ### Technical meaning
 
-Documentation/pitch polish starts while deep engineering is still in flight.
+The team is simultaneously:
 
-This matters because the repository was already serving two audiences:
+- still hardening the system
+- and already refining how it will be described
 
-- the team trying to make it work
-- the judges/audience who would need to understand it quickly
+That is standard hackathon behavior, but it matters for reading the later
+commits: technical stabilization and narrative stabilization were happening in
+parallel.
 
-## 5:14:34 PM — `78f28eb` — `windows-face-supabase-match`
+---
+
+### 5:14:34 PM — Git — `78f28eb` — Supabase image records get a more explicit update model
 
 **Commit:** `78f28eb`  
+**Branch context:** `windows-face-supabase-match`  
 **Message:** `Use progers/base64 for image encoding; add Supabase image base64 insert/update; name new faces 'unidentified'`
 
-### What the diff actually changed
+### Technical event
+
+Image handling in Supabase gets promoted from ad hoc behavior to an explicit API
+surface inside the code.
+
+### What the diff adds
 
 - `insert_image_base64`
 - `find_image_by_url`
 - `update_image_by_id`
 - `update_known_face_photo`
-- raw-byte base64 helpers
 
 ### Technical meaning
 
-This is the first mature attempt to make image handling in Supabase coherent.
+This is the first mature attempt to make the backend image lifecycle coherent.
 
-### Problem being attacked
+### What is still unresolved
 
-- images for new faces and matched faces needed a backend update path
-- raw file URIs were not enough
+The project is still not fully clean on what `photo_url` means everywhere. That
+semantic cleanup comes later.
 
-### What was still imperfect
+---
 
-Photo semantics were still not fully clean. The repo was still using fields in
-ways that later commits would refine.
-
-## 5:21:31 PM — `349ce49` — `windows-face-supabase-match`
+### 5:21:31 PM — Git — `349ce49` — Existing matches start getting treated as update targets
 
 **Commit:** `349ce49`  
+**Branch context:** `windows-face-supabase-match`  
 **Message:** `feat(windows): sync faces to Supabase with raw base64 and update existing matches`
 
+### Technical event
+
+The system begins explicitly trying to update matched users, not just create
+unknowns.
+
 ### Technical meaning
 
-This is the first explicit push to treat matched faces as update events, not
-just unknowns as insert events.
+This is the correct direction after the `4:37 PM` Discord self-assessment.
 
-### Why this matters
+### Important nuance
 
-It aligns directly with the 4:37 PM Discord observation that matched faces were
-still weak on update semantics.
+This commit introduces the right intent, but the later fixes show the behavior
+still was not fully correct yet.
 
-### Technical reading
+---
 
-This commit is important not because it fully solved the issue, but because it
-shows the team had correctly identified the gap and was coding toward it.
-
-## 5:24:29 PM — `39f6c42` — `main`
+### 5:24:29 PM — Git — `39f6c42` — GuardianCare fall-detection lineage enters `main`
 
 **Commit:** `39f6c42`  
+**Branch context:** `main`  
 **Message:** `Fall detection`
 
+### Technical event
+
+The earlier GuardianCare code is imported into the repo.
+
+### What arrives technically
+
+- `guardiancare/fall_detection.py`
+- `guardiancare/face_recognition_module.py`
+- `guardiancare/main.py`
+- iOS and web shells inside `guardiancare/`
+
 ### Technical meaning
 
-This brings in the earlier GuardianCare line and massively expands `main` with:
+This is not cleanup. This is another major product lineage entering the main
+history during the active implementation window.
 
-- fall-detection code
-- face-recognition code
-- iOS and web shells
-- Supabase client code
+### What this shows
 
-### Why it matters in the timeline
+By `5:24 PM`, Lumi AI’s technical history is definitely not linear. It now
+contains:
 
-This is not late cleanup. This is an active branch of product history entering
-the main line while the Windows branch is still evolving.
-
-### Interpretation
-
-The repo is now definitely preserving multiple valid paths to the same product:
-
-- Pi/Limelight path
-- Windows/Supabase path
+- Pi preview path
+- Windows fallback path
 - GuardianCare integrated prototype path
 
-## 5:33:07 PM — `ae0cf6c` — `windows-face-supabase-match`
+all on the same day.
+
+---
+
+### 5:33:07 PM — Git — `ae0cf6c` — Direct sample-image upload proving continues
 
 **Commit:** `ae0cf6c`  
+**Branch context:** `windows-face-supabase-match`  
 **Message:** `feat: upload download.jpg and ensure unknown faces are registered as unidentified in Supabase`
 
+### Technical event
+
+The team adds more concrete validation scripts around image upload behavior.
+
 ### Technical meaning
 
-This is a verification/proving commit.
+The project still does not fully trust the live loop alone. It needs controlled
+probe artifacts and scripts to prove that backend writes behave as expected.
 
-It uses concrete artifacts and scripts to prove that:
+---
 
-- image upload path behaves
-- unknown registration behavior is correct
-
-This is a strong sign that the team was using targeted probe scripts to debug
-the backend rather than relying only on the live app.
-
-## 5:36:10 PM — `0238dc7` — `windows-face-supabase-match`
+### 5:36:10 PM — Git — `0238dc7` — Real-time event log and telemetry appear
 
 **Commit:** `0238dc7`  
+**Branch context:** `windows-face-supabase-match`  
 **Message:** `feat(dashboard): add real-time event log and telemetry status`
 
+### Technical event
+
+The app gains internal event logging and telemetry.
+
 ### Technical meaning
 
-The project adds observability infrastructure:
+At this stage, the problem is no longer “we need more features.” It is:
 
-- real-time event log
-- telemetry status
+- where exactly is the pipeline failing
 
-### Why it matters
+This commit makes the app explain itself.
 
-At this stage, the team no longer just needs the app to “run.” They need to see
-which internal stage is failing.
+---
 
-This commit marks the transition from:
-
-- app as demo artifact
-
-to:
-
-- app as self-diagnosing debug surface
-
-## 5:39:39 PM — `436ab6b` — `windows-face-supabase-match`
+### 5:39:39 PM — Git — `436ab6b` — Duplicate suppression and logging get tightened
 
 **Commit:** `436ab6b`  
+**Branch context:** `windows-face-supabase-match`  
 **Message:** `feat(windows): enhance logging for encoding/uploads and tune sensitivity to prevent duplicates`
 
-### What the diff actually changed
+### Technical event
 
-- server event buffer
-- explicit upload/detection event messages
+The team tunes thresholds and expands event logging to reduce duplicate face
+handling.
+
+### What the diff changes
+
 - threshold lowered to `0.55`
-- recent distance lowered to `0.20`
-- recent time window expanded to `90s`
+- recent-face distance lowered to `0.20`
+- recent-face window expanded to `90` seconds
+- upload/detection logging becomes more explicit
 
 ### Technical meaning
 
-This is a parameter-tuning and observability commit aimed at duplicate
-suppression.
+This is an application-behavior tuning event, not just a coding cleanup event.
 
-### What it implies
+It shows that duplicate creation or repeated processing had become a live pain
+point.
 
-By this point, duplicate creation or over-frequent face reprocessing had become
-a live issue.
+---
 
-## 5:42:43 PM — `9ced36a` — `windows-face-supabase-match`
+### 5:42:43 PM — Git — `9ced36a` — A real control-flow bug in uploads gets fixed
 
 **Commit:** `9ced36a`  
+**Branch context:** `windows-face-supabase-match`  
 **Message:** `fix(windows): ensure face uploads occur by decoupling encoding from initial embedding check and reducing cooldown`
 
-### What the diff actually fixed
+### Technical event
 
-- moved embedding gating deeper into the unknown-face branch
-- reduced `save-cooldown` from `10.0` to `5.0`
+The team fixes a real logic flaw in the live upload pipeline.
+
+### What the diff does
+
+- moves embedding gating deeper into the unknown-face path
+- reduces save cooldown from `10s` to `5s`
 
 ### Technical meaning
 
-This is one of the clearest logic-bug commits in the entire repo.
+Before this commit, a face could be detected but still fail to upload because
+the control flow exited too early.
 
-The bug was:
+This is one of the clearest bug-fix moments in the whole repo.
 
-- detection could happen
-- but upload could still be skipped because the control flow exited too early
+---
 
-This is not a configuration problem. It is a real pipeline logic flaw being
-repaired.
-
-## 5:44:40 PM — `ad6a6f9` — `windows-face-supabase-match`
+### 5:44:40 PM — Git — `ad6a6f9` — More logging means the previous fix was not the end
 
 **Commit:** `ad6a6f9`  
+**Branch context:** `windows-face-supabase-match`  
 **Message:** `debug: add verbose logging and continue investigating supabase sync issues`
 
+### Technical event
+
+Verbose debugging is added right after the upload control-flow fix.
+
 ### Technical meaning
 
-The previous fix was not enough. Sync issues still existed.
+This confirms:
 
-This commit is significant because it confirms:
+- upload correctness was improving
+- but backend sync was still not stable enough to trust
 
-- the team was still in active diagnosis mode after `9ced36a`
-- Supabase sync was not yet stable
+---
 
-## 5:46:13 PM — `d6dd6f3` — `windows-face-supabase-match`
+### 5:46:13 PM — Git — `d6dd6f3` — Matched-face updates get explicit backend logic
 
 **Commit:** `d6dd6f3`  
+**Branch context:** `windows-face-supabase-match`  
 **Message:** `fix(windows): ensure face data is sent to Supabase on matches and rename old entries to unidentified`
 
-### What the diff actually changed
+### Technical event
 
-- explicit event when a match is found
-- explicit matched-face update path
-- fallback image insertion when old reference missing
-- known-face photo update after new image record
+Matched faces finally get explicit update behavior.
+
+### What the diff does
+
+- logs match detection
+- attempts image update for matched users
+- falls back to new image record creation if needed
+- updates face-photo linkage afterwards
 
 ### Technical meaning
 
-This directly attacks the limitation identified in the Discord summary:
+This is the clearest direct response to the earlier Discord note that matched
+faces were weaker than unknowns in backend update behavior.
 
-- unknown creation existed
-- matched-face image/state updating was weaker
+---
 
-This is the first truly explicit fix for that matched-face update gap.
-
-## 5:48:22 PM — `e233891` — `windows-face-supabase-match`
+### 5:48:22 PM — Git — `e233891` — Windows/Supabase sync reaches a “stable” milestone
 
 **Commit:** `e233891`  
+**Branch context:** `windows-face-supabase-match`  
 **Message:** `stable: working face sync to supabase with unidentified naming and base64 storage`
 
+### Technical event
+
+The branch explicitly declares stability for the face sync path.
+
 ### Technical meaning
 
-This is the branch’s first explicit claim of stability.
-
-Given the prior commits, that claim rests on:
+By this point, the branch had already accumulated:
 
 - base64 transport
-- direct test scripts
+- direct backend tests
 - telemetry
 - duplicate suppression tuning
-- upload control-flow repair
-- matched-face update fixes
+- upload logic fixes
+- matched-face update logic
 
-### Interpretation
+This is the first point where the Windows fallback can reasonably be treated as
+a converged runtime path.
 
-This is the first point in the day where the Windows/Supabase path can be read
-as technically converged enough to trust for demo use.
+---
 
-## 5:49:29 PM — `78f7a8a` — `origin/windows-face-supabase-match`
+### 5:49:29 PM — Git — `78f7a8a` — Gallery rendering is improved on the remote branch head
 
 **Commit:** `78f7a8a`  
+**Branch context:** `origin/windows-face-supabase-match`  
 **Message:** `feat(dashboard): add recognized faces gallery with base64 decoding`
 
-### Technical meaning
+### Technical event
 
-Once the sync path mostly worked, attention moved to rendering truthfully from
-backend data.
-
-This commit improves:
-
-- recognized-face gallery
-- base64 decoding for display
-
-### Technical implication
-
-The branch is now solving presentation fidelity on top of sync correctness.
-
-## 5:57:38 PM — `9484893` — `origin/pi-limelight-orchestrator`
-
-**Commit:** `9484893`  
-**Message:** `Fix face upload errors and wire dashboard entirely to Supabase`
-
-### What the diff actually changed
-
-- added `find_image_by_id` to `windows/supabase_known_faces.py`
-- changed gallery logic in `windows/webcam_supabase_live.py`
-- stopped treating `photo_url` only as a direct URL lookup assumption
-- allowed the dashboard to fetch actual image row content by id
+The dashboard/gallery begins decoding backend-stored image data for display.
 
 ### Technical meaning
 
-This is the final major code hardening commit of the day.
+The project moves from:
 
-It fixes a semantic mismatch:
-
-- image identity
-- image storage
-- and dashboard rendering
-
-had drifted apart
-
-### Why this is a big deal
-
-This commit is the best evidence that the team moved from:
-
-- “we can create faces and images”
+- “state is being written”
 
 to:
 
-- “the dashboard is actually reading the backend truth in a more coherent way”
+- “state is being rendered meaningfully”
 
-### Branch naming note
+---
 
-The fact that this lands on `pi-limelight-orchestrator` even though it is
-primarily Windows/Supabase dashboard hardening is itself telling:
+### 5:57:38 PM — Git — `9484893` — Final major hardening: dashboard semantics become more backend-correct
 
-- branch names no longer match subsystem ownership cleanly
-- the engineering work had outrun the branch taxonomy
+**Commit:** `9484893`  
+**Branch context:** `origin/pi-limelight-orchestrator`  
+**Message:** `Fix face upload errors and wire dashboard entirely to Supabase`
 
-## 3. Evening merge and preservation timeline
+### Technical event
 
-## 9:44 PM — merge sequence begins
+The day’s last major code hardening commit lands.
 
-### `5662334` — `main`
+### What the diff actually changes
 
-- merge `pi-limelight-orchestrator` into `main`
-
-### `aac1438` — `main`
-
-- merge `raw-limelight-feed` into `main`
+- `find_image_by_id` is added
+- gallery logic stops assuming `photo_url` is always directly usable as a URL
+- dashboard fetches real image content from the `images` table by id
 
 ### Technical meaning
 
-The hackathon code is no longer being treated as disposable side branches.
-Preservation becomes an explicit technical act.
+This is the semantic cleanup commit for the backend truth model.
 
-## 9:51 PM onward — documentation and artifact preservation
+It fixes a structural mismatch between:
 
-### `5034da5`
+- face rows
+- image rows
+- gallery rendering assumptions
+
+### Why this is such an important endpoint
+
+This is the clearest final sign that the project is trying to end the day with:
+
+- a dashboard that reflects Supabase truth
+- not just local memory and optimistic assumptions
+
+---
+
+## 9:44 PM — Git — Merge phase begins on `main`
+
+**Commits:**
+
+- `5662334` Merge `pi-limelight-orchestrator` into `main`
+- `aac1438` Merge `raw-limelight-feed` into `main`
+
+### Technical event
+
+The project stops treating the branches as temporary experiments and starts
+preserving them in one history.
+
+### Technical meaning
+
+This is not just a repo-management detail. It is a technical decision:
+
+- keep the working Pi preview line
+- keep the working Windows/Supabase line
+- do not lose either just because the final demo centered more on one than the
+  other
+
+---
+
+## 9:51 PM onward — Documentation and artifact preservation phase
+
+### 9:51 PM — `5034da5`
 
 - README rewritten as hackathon narrative
 
-### `11a2789`
+### 10:17 PM — `11a2789`
 
 - unpacked `guardiancare.zip` into `guardiancare_late/`
 
-### `960f8ca`
+### 10:28 PM — `960f8ca`
 
-- README rewritten using Discord timeline + commit history
+- README aligned to Discord timeline and commit history
 
-### `5adf24e`
+### 10:31 PM — `5adf24e`
 
-- README gains commit-level engineering timeline
+- README gains detailed commit-by-commit engineering section
 
-### `3cd3788`
+### 8:36 AM next morning — `3cd3788`
 
-- README gains cross-branch analysis
+- README gains cross-branch timeline analysis
 
-### `f0446c7`
+### 8:47 AM next morning — `f0446c7`
 
-- added general technical retrospective
+- technical retrospective added
+
+### 8:57 AM next morning — `d7d43e4`
+
+- this super detailed timeline file added
 
 ### Technical meaning
 
-By this point the engineering day is over. The task is now:
+The project’s last phase is preservation:
 
-- preserve branch meaning
+- preserve branch history
 - preserve late artifacts
-- preserve technical lessons
+- preserve the real technical story
 
-## 4. Branch-level diff synthesis
+---
 
-This section summarizes what each branch contributed as a whole, based on its
-effective diff against the common Pi-preview base at `63b6a42`.
+## Final reading of the timeline
 
-## `origin/raw-limelight-feed` relative to `63b6a42`
+If you read the repo strictly by timestamped events, the project evolves in this
+order:
 
-Approximate contribution:
+1. the team chooses a hardware-differentiated elder-care assistant idea
+2. the Pi/Limelight path proves raw stream access
+3. the team turns stream access into a browser preview problem
+4. the team turns browser preview into a public reachability problem
+5. the sender/receiver split appears
+6. the Windows fallback becomes a real alternate runtime
+7. image transport shifts toward base64 because backend truth matters
+8. telemetry appears because silent failures matter
+9. matched-face update correctness becomes a central bug class
+10. dashboard semantics are cleaned up against real Supabase data
+11. fall-detection work continues in parallel and gets preserved at the end
+12. the branches are merged instead of being thrown away
 
-- ~625 insertions over the base
-- preview/tunnel/service/sender additions
+That is the most accurate chronological technical reading of Lumi AI based on:
 
-Key additions:
-
-- preview and tunnel services
-- `pi/face_capture_sender.py`
-- ngrok support
-- initial Windows receiver presence
-
-Technical role:
-
-- convert Pi stream proof into a remotely shareable/dev-operable subsystem
-
-## `windows-face-supabase-match` relative to `63b6a42`
-
-Approximate contribution:
-
-- ~3025 insertions over the base
-
-Key additions:
-
-- full Windows recognition pipeline
-- Supabase cache/matching code
-- live preview/dashboard
-- launcher/install scripts
-- test utilities
-
-Technical role:
-
-- become the primary fallback architecture
-- own the identity/state/demo-survival problem
-
-## `origin/pi-limelight-orchestrator` relative to `63b6a42`
-
-Approximate contribution:
-
-- ~3638 insertions over the base
-
-Key additions beyond the Windows branch:
-
-- richer image/sync helpers
-- dashboard entirely backed by Supabase
-- more upload and gallery correctness
-- test/sample upload scripts
-
-Technical role:
-
-- carry the latest hardening of the recognition + Supabase + dashboard line
-
-## `openpose-pose-integration`
-
-Committed branch state:
-
-- still points at `63b6a42`
-
-Live evidence:
-
-- stash for `wip openpose overlay`
-
-Technical role:
-
-- active exploration for stronger pose/perception integration
-- not a finalized landed runtime path
-
-## 5. Final technical reading of the day
-
-If the repo is read purely through timestamps and diffs, the day looks like
-this:
-
-### Morning
-
-- idea narrowing
-- hardware vs non-hardware debate
-- product sentence forms around falls + reminders
-
-### Early afternoon
-
-- Pi stream proof
-- browser preview bridge
-- first public/tunnel attempts
-
-### Mid afternoon
-
-- sender/receiver split
-- Windows fallback becomes real
-- OpenPose exploration exists in parallel
-
-### Late afternoon
-
-- base64 transport pivot
-- Supabase test tooling
-- telemetry and debug surfaces
-- duplicate suppression tuning
-- matched-face update bug fixing
-- gallery/dashboard semantics cleanup
-
-### End of day
-
-- late fall-detection artifact arrives
-- branches merged
-- technical story preserved in docs
-
-## 6. Most important timeline-level conclusion
-
-The codebase did not evolve in a straight line from idea to product.
-
-It evolved in three overlapping loops:
-
-1. **perception loop**
-   - Pi, Limelight, OpenPose, fall detection
-2. **demo survivability loop**
-   - browser preview, tunnels, Windows fallback, launcher
-3. **backend truth loop**
-   - Supabase inserts, updates, image transport, dashboard correctness
-
-The Windows branch converged fastest on demo survivability and backend truth.
-The Pi and fall-detection lines stayed technically important, but they were
-never the only live center of the project after mid-afternoon.
-
-That is the most accurate technical reading of the repository when you respect:
-
+- the commit timestamps
+- the diff contents
 - the branch graph
-- the diffs
-- and the timestamps together.
+- and the Discord event timings together.
