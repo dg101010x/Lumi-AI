@@ -27,6 +27,13 @@ def build_write_headers(api_key: str) -> dict[str, str]:
     return headers
 
 
+def build_patch_headers(api_key: str) -> dict[str, str]:
+    headers = build_headers(api_key)
+    headers["Content-Type"] = "application/json"
+    headers["Prefer"] = "return=representation"
+    return headers
+
+
 def display_name_for_face(face: dict[str, Any]) -> str:
     return (
         str(face.get("person_name") or "").strip()
@@ -167,3 +174,70 @@ class SupabaseKnownFacesCache:
         if not isinstance(rows, list) or not rows:
             raise RuntimeError("Supabase image insert returned no row")
         return dict(rows[0])
+
+    def insert_image_base64(
+        self,
+        *,
+        image_name: str,
+        image_base64: str,
+        table_name: str = DEFAULT_IMAGES_TABLE_NAME,
+    ) -> dict[str, Any]:
+        """Insert an image row where the image_url field stores raw base64 string."""
+        response = requests.post(
+            f"{self.project_url.rstrip('/')}/rest/v1/{table_name}",
+            headers=build_write_headers(self.api_key),
+            json={
+                "image_name": image_name,
+                "image_url": image_base64,
+            },
+            timeout=self.timeout_seconds,
+        )
+        response.raise_for_status()
+        rows = response.json()
+        if not isinstance(rows, list) or not rows:
+            raise RuntimeError("Supabase image insert returned no row")
+        return dict(rows[0])
+
+    def find_image_by_url(self, *, image_url: str, table_name: str = DEFAULT_IMAGES_TABLE_NAME) -> dict[str, Any] | None:
+        # Query images where image_url equals provided value
+        resp = requests.get(
+            f"{self.project_url.rstrip('/')}/rest/v1/{table_name}",
+            headers=build_headers(self.api_key),
+            params={"select": "id,image_name,image_url", "image_url": f"eq.{image_url}"},
+            timeout=self.timeout_seconds,
+        )
+        resp.raise_for_status()
+        rows = resp.json()
+        if isinstance(rows, list) and rows:
+            return dict(rows[0])
+        return None
+
+    def update_image_by_id(self, *, image_id: int, image_base64: str, table_name: str = DEFAULT_IMAGES_TABLE_NAME) -> dict[str, Any]:
+        resp = requests.patch(
+            f"{self.project_url.rstrip('/')}/rest/v1/{table_name}?id=eq.{image_id}",
+            headers=build_patch_headers(self.api_key),
+            json={"image_url": image_base64},
+            timeout=self.timeout_seconds,
+        )
+        resp.raise_for_status()
+        rows = resp.json()
+        if not isinstance(rows, list) or not rows:
+            raise RuntimeError("Supabase image update returned no row")
+        return dict(rows[0])
+
+    def update_known_face_photo(self, *, face_id: int, photo_url: str) -> dict[str, Any]:
+        resp = requests.patch(
+            f"{self.project_url.rstrip('/')}/rest/v1/{self.table_name}?id=eq.{face_id}",
+            headers=build_patch_headers(self.api_key),
+            json={"photo_url": photo_url},
+            timeout=self.timeout_seconds,
+        )
+        resp.raise_for_status()
+        rows = resp.json()
+        if not isinstance(rows, list) or not rows:
+            raise RuntimeError("Supabase known_face update returned no row")
+        row = dict(rows[0])
+        row["display_name"] = display_name_for_face(row)
+        # refresh local cache entry if present
+        self._faces = [f for f in self._faces if f.get("id") != row.get("id")] + [row]
+        return row

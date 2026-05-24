@@ -16,9 +16,21 @@ import cv2
 import face_recognition
 from flask import Flask, Response, jsonify, request
 import requests
+from pathlib import Path
+import sys
 
 from face_matching import choose_best_match, distance_for_metric
 from supabase_known_faces import SupabaseKnownFacesCache
+
+# Make scripts package importable (allow importing AegisAI/scripts)
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+try:
+    from scripts.base64_helper import encode_bytes
+except Exception:
+    encode_bytes = None
 
 
 DEFAULT_PROJECT_URL = "https://gmmpltgvtonpnrfckrvy.supabase.co"
@@ -242,11 +254,53 @@ def process_incoming_image_bytes(
     image_path.write_bytes(image_bytes)
     image_url = image_path.resolve().as_uri()
 
+    # Encode image bytes using the vendored progers/base64 helper when available
+    image_b64 = None
+    try:
+        if encode_bytes:
+            image_b64 = encode_bytes(image_bytes)
+        else:
+            import base64 as _b64
+
+            image_b64 = _b64.b64encode(image_bytes).decode("ascii")
+    except Exception:
+        image_b64 = None
+
+    # If any of the matches were 'matched', update their stored image in Supabase
+    if image_b64:
+        try:
+            cache_inst = ensure_cache()
+            for res in results:
+                if res.get("status") == "matched":
+                    person = res.get("person") or {}
+                    photo_url = str(person.get("photo_url") or "").strip()
+                    if not photo_url:
+                        continue
+                    try:
+                        image_row = cache_inst.find_image_by_url(image_url=photo_url)
+                        if image_row and image_row.get("id"):
+                            try:
+                                cache_inst.update_image_by_id(image_id=int(image_row.get("id")), image_base64=image_b64)
+                            except Exception:
+                                # fallback: insert new image record
+                                cache_inst.insert_image_base64(image_name=f"updated-{base_name}", image_base64=image_b64)
+                            # update the known face's photo_url to the raw base64 string
+                            try:
+                                face_id = int(person.get("id"))
+                                cache_inst.update_known_face_photo(face_id=face_id, photo_url=image_b64)
+                            except Exception:
+                                pass
+                    except Exception:
+                        continue
+        except Exception:
+            # non-fatal
+            pass
+
     created = create_new_faces_for_unknowns(
         metadata,
         results,
         ensure_cache(),
-        image_url=image_url,
+        image_url=(image_b64 if image_b64 else image_url),
         image_name=base_name,
     )
 
@@ -525,13 +579,15 @@ def create_new_faces_for_unknowns(
 
         stamp = utc_stamp()
         try:
-            image_row = known_faces_cache.insert_image_record(
+            # Insert image as raw base64 (image_url param may be a file URI; prefer storing base64)
+            image_row = known_faces_cache.insert_image_base64(
                 image_name=f"{image_name}-{index}",
-                image_url=image_url,
+                image_base64=image_url if isinstance(image_url, str) and image_url.startswith("data:") else image_url,
             )
+            # Create known face with exact person_name 'unidentified' per spec
             row = known_faces_cache.insert_known_face(
                 embedding=embedding,
-                person_name=f"Unknown {stamp}",
+                person_name="unidentified",
                 label="auto-created",
                 photo_url=image_row.get("image_url", image_url),
                 last_seen_at=datetime.now(timezone.utc).isoformat(),

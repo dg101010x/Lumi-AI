@@ -27,6 +27,19 @@ def encode(text: str, encoding: str = 'utf8') -> str:
             return _pybase64.b64encode(text.encode('latin1')).decode('ascii')
         return _pybase64.b64encode(text.encode('utf8')).decode('ascii')
 
+
+def encode_bytes(data: bytes) -> str:
+    """Encode raw bytes to base64 using vendored Node CLI when available.
+
+    Falls back to Python's base64 if Node isn't available.
+    Returns the base64 string (no data: prefix).
+    """
+    try:
+        out = _run_node('encode', 'ascii', data)
+        return out.decode('ascii')
+    except FileNotFoundError:
+        return _pybase64.b64encode(data).decode('ascii')
+
 def decode(b64text: str, encoding: str = 'utf8') -> str:
     data = b64text.encode('utf8')
     try:
@@ -37,6 +50,15 @@ def decode(b64text: str, encoding: str = 'utf8') -> str:
         if encoding == 'ascii':
             return raw.decode('latin1')
         return raw.decode('utf8')
+
+
+def decode_to_bytes(b64text: str) -> bytes:
+    """Decode a base64 string to raw bytes using Node CLI when available; fallback to Python."""
+    try:
+        out = _run_node('decode', 'ascii', b64text.encode('utf8'))
+        return out
+    except FileNotFoundError:
+        return _pybase64.b64decode(b64text)
 
 if __name__ == '__main__':
     # simple CLI: encode/decode stdin
