@@ -298,6 +298,7 @@ def webcam_loop(args: argparse.Namespace) -> None:
                 boxes_small = face_recognition.face_locations(rgb_small, model="hog")
                 encodings = face_recognition.face_encodings(rgb_small, boxes_small)
                 detections = []
+                print(f"[DEBUG] Frame {frame_index}: Found {len(boxes_small)} face(s)")
 
                 for (top_s, right_s, bottom_s, left_s), encoding in zip(boxes_small, encodings):
                     scale = 1.0 / args.detect_scale
@@ -406,9 +407,11 @@ def webcam_loop(args: argparse.Namespace) -> None:
             set_status(payload)
 
             if detections and (time.time() - last_save_ts) >= args.save_cooldown:
+                print(f"[DEBUG] Entering upload block with {len(detections)} detections")
                 image_path, json_path = save_detection_with_paths(output_dir, annotated, payload)
                 for detection in detections:
                     status = detection.get("status")
+                    print(f"[DEBUG] Processing detection status: {status}")
                     
                     # Prepare face crop base64 (clean, no prefix)
                     box = detection["box"]
