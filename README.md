@@ -1,31 +1,41 @@
 # Lumi AI
 
-Lumi AI is an AI care companion that helps families monitor, support, and respond when a loved one may need attention.
+**Caregiving shouldn't feel like a second job.**
 
-## Overview
+Lumi AI is a care companion app for families keeping an eye on aging parents or loved ones who need a little extra support. It connects family members, simplifies coordination, and surfaces the moments that actually matter — without burying everyone in noise.
 
-Lumi AI is built as a caregiving product with a native iOS app and a companion web onboarding experience. The current repository includes a SwiftUI iOS app, Firebase Authentication for identity, and Supabase for application data and state management.
+---
 
-## Features
+## The Problem
 
-- 4-step onboarding flow covering Family, Resident, Health, and Alerts
-- Email/password authentication with Firebase Auth
-- Supabase-backed app data with authenticated access control
-- Home dashboard with a prominent “Alert caregivers” action
-- Per-caregiver calling and messaging support
-- Activity feed grouped by alerts, visitors, meals & medication, and daily activity
-- Editable caregiver and resident settings with live write-through updates
+Most families cobble together a mix of group texts, phone tag, and gut instinct to manage caregiving from a distance. It works until it doesn't. Lumi exists for the moments when it doesn't.
+
+---
+
+## What It Does
+
+- **Onboarding in 4 steps** — set up your family, add your loved one's info, share health context, and configure alerts. Takes about two minutes.
+- **Caregiver alerts** — one tap from the home dashboard notifies the right people immediately
+- **Per-caregiver calling & messaging** — reach any family member directly, right from the app
+- **Activity feed** — grouped by alerts, visitors, meals & medication, and daily activity so nothing gets buried
+- **Editable settings** — update caregiver or resident info anytime, changes sync instantly
+
+---
 
 ## Tech Stack
 
-- **iOS:** SwiftUI
-- **Authentication:** Firebase Auth
-- **Backend/Data:** Supabase Postgres
-- **Web:** Next.js onboarding scaffold
+| Layer | Technology |
+|---|---|
+| iOS | SwiftUI |
+| Auth | Firebase Auth (email/password) |
+| Data | Supabase Postgres |
+| Web | Next.js (onboarding scaffold) |
 
-## Repository Structure
+---
 
-```text
+## Repo Structure
+
+```
 .
 ├── ios/
 │   ├── Lumi.xcodeproj/
@@ -46,40 +56,24 @@ Lumi AI is built as a caregiving product with a native iOS app and a companion w
 └── prd.md
 ```
 
-## Getting Started
+---
 
-### Prerequisites
+## Running It Locally
 
-- Xcode
-- A Firebase project
-- A Supabase project
+You'll need Xcode, a Firebase project, and a Supabase project.
 
-### Setup
+1. Clone the repo
+2. Open `ios/Lumi.xcodeproj` in Xcode
+3. Drop in your `GoogleService-Info.plist` for Firebase
+4. Add your Supabase credentials locally
+5. Build and run
 
-1. Clone the repository.
-2. Open `ios/Lumi.xcodeproj` in Xcode.
-3. Add your local `GoogleService-Info.plist` file for Firebase configuration.
-4. Configure Supabase credentials locally.
-5. Build and run the iOS app.
+---
 
-## Demo Flow
+## Demo Path
 
-A good demo path is:
-
-1. Complete onboarding
-2. Enter the home dashboard
+1. Complete onboarding (Family → Resident → Health → Alerts)
+2. Land on the home dashboard
 3. Trigger the caregiver alert flow
-4. Show the activity feed categories
-5. Edit caregiver or resident settings
-
-## Why it matters
-
-Caring for loved ones from a distance is stressful. Lumi AI is designed to make caregiving more proactive, connected, and actionable through alerts, communication tools, and a structured family dashboard.
-
-## Current Status
-
-This repository already contains the core app structure, onboarding flow, caregiver communication actions, and settings management. The next improvements are polishing the README further with screenshots, a short architecture diagram, and a demo video link.
-
-## Security Note
-
-Do not commit production secrets or live config files to the public repository. Keep Firebase and backend credentials in local-only configuration or secure environment management.
+4. Browse the activity feed categories
+5. Edit a caregiver or resident from settings
