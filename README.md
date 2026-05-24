@@ -419,6 +419,392 @@ uses a MediaPipe pose-based fall path with torso-angle and hip-drop logic,
 which makes it relevant to the original Lumi AI concept instead of being random
 extra files.
 
+## Commit-by-commit engineering timeline
+
+This is the closest thing to the actual engineering diary. It is based on the
+code diffs, not just the commit titles.
+
+### `f5c4e7d` Initial commit
+
+- The repo started almost empty.
+- At this point there was no real hardware path, no app path, and no backend
+  logic yet.
+- This commit matters mostly because everything after it was built under the
+  pressure of one day.
+
+### `3a3f618` Add Raspberry Pi Limelight viewer scaffold
+
+- This was the first real technical base.
+- It added:
+  - `pi/limelight_probe.py`
+  - `pi/limelight_video_viewer.py`
+  - `requirements.txt`
+  - the early Gemini prompt file
+- The code here was focused on discovery and direct access:
+  - probing endpoints
+  - trying common Limelight stream paths
+  - opening the raw stream with OpenCV
+- What was still missing:
+  - no browser preview
+  - no public sharing path
+  - no receiver path
+  - no stable deployment story
+- The next commit that meaningfully extended this was `a220cf9`.
+
+### `a4c9fa3` Ignore Python cache files
+
+- This fixed a repo hygiene mistake from the scaffold phase.
+- A compiled `__pycache__` artifact had been committed.
+- It did not change functionality, but it shows how quickly the first Pi work
+  was moving: files were being generated and committed before the repo
+  conventions were fully settled.
+
+### `a220cf9` Add public Limelight web preview bridge
+
+- This was the first major leap from “dev tool” to “demo tool.”
+- It added `pi/limelight_web_preview.py` and expanded the viewer path.
+- The code change was important:
+  - instead of only opening the stream locally in OpenCV
+  - it now proxied the MJPEG feed through a local HTTP server
+  - and exposed `/`, `/stream.mjpg`, and health-style preview endpoints
+- What this solved:
+  - a browser could now view the feed
+  - the stream no longer depended on an OpenCV desktop window to be useful
+- What was still broken:
+  - this was still a local-network solution
+  - there was no proper public path
+- The next commit tried to solve that operational gap.
+
+### `63b6a42` Prepare Limelight preview for Cloud Run
+
+- This commit did not fix camera logic. It fixed deployment shape.
+- It added:
+  - `Dockerfile`
+  - `.dockerignore`
+  - `PORT`-aware behavior in the preview app
+- In code terms, this was the difference between:
+  - “works as a local Python script”
+  - and “can at least be containerized and hosted”
+- What it revealed:
+  - the preview server itself was not the hard part
+  - the hard part was that Cloud Run still could not see LAN-only upstream
+    sources like `limelight.local`
+- That is why the next commit turned toward keepalive services and tunneling.
+
+### `c9e0f2f` Add managed services for Limelight preview tunnel
+
+- This added the operational Pi glue:
+  - systemd user services
+  - localtunnel watcher
+  - preview keepalive scripts
+- The problem being solved here was not code correctness.
+- The problem was that even a working preview is useless if:
+  - it dies between demos
+  - it must be restarted manually
+  - or the tunnel is too fragile to keep up
+- This commit made the preview path more survivable, but it still did not solve
+  perception or identity.
+
+### `7aeebc1` Add webcam face sender and ngrok service
+
+- This is where the project started stepping beyond “stream a camera.”
+- It added:
+  - `pi/face_capture_sender.py`
+  - `windows/face_receiver.py`
+  - `requirements-face.txt`
+  - `requirements-windows.txt`
+  - ngrok service support
+- The architecture change here was major:
+  - the Pi could now send face data outward
+  - a Windows machine could receive it
+  - the repo started splitting into sender/receiver responsibilities
+- What was still missing:
+  - robust matching
+  - Supabase-backed identity
+  - a usable local dashboard on Windows
+- The next big commit built that out.
+
+### `04927dd` Add Windows face matching and LumiAI launcher
+
+- This was the first real “software-only fallback can run the whole demo”
+  commit.
+- It added:
+  - `windows/face_matching.py`
+  - `windows/supabase_known_faces.py`
+  - `windows/webcam_supabase_live.py`
+  - `windows/webcam_supabase_match.py`
+  - `windows/lumiai.ps1`
+  - Windows requirements files
+- The code change was architectural:
+  - direct webcam access on Windows
+  - local matching against Supabase
+  - a local preview path
+  - a launcher to keep the demo usable from one command
+- What was still wrong right after this:
+  - the live view path was not yet stable
+  - unknown naming was inconsistent
+  - image/update semantics were still immature
+- That is exactly what the next series of commits fixed.
+
+### `8e963d5` fix(windows): resolve live view issues by adding missing dependencies and updating configuration
+
+- This is the first big “debugging the working fallback” commit.
+- The code diff shows several concrete improvements:
+  - local IPv4 discovery
+  - explicit JPEG byte helpers
+  - a lower-latency stream loop
+  - `/images/<filename>` serving
+  - frame skipping with `--process-every-n`
+  - downscaled detection with `--detect-scale`
+  - lower stream sleep from `0.1` to `0.03`
+  - optional Gemini face description + Windows speaker prompt
+- In plain English, this fixed:
+  - laggy local preview
+  - preview pages that were too heavy to feel live
+  - saved images that were not reachable from other laptops on the LAN
+- It also introduced a more serious performance pattern:
+  - reuse the last processed detections between recognition passes instead of
+    forcing full recognition every frame
+- What still needed cleanup immediately after this:
+  - unknown names were still not standardized
+  - upload logic was still missing some cases
+
+### `cf5dd81` fix(windows): set default unknown person name to `unidentified`
+
+- Small diff, important semantic cleanup.
+- Before this, unknowns could be named in inconsistent ways.
+- After this, the unknown-person fallback had one stable label.
+- That mattered because the next Supabase sync commits were trying to make the
+  insert/update path easier to reason about.
+
+### `3c07a54` Add Supabase test face insert script
+
+- This commit exists because configuration guessing was no longer enough.
+- The script was added to test:
+  - whether a face row could actually be inserted
+  - whether the current key worked
+  - whether the table schema accepted the payload shape
+- This commit does not make the app smarter.
+- It makes the team faster at separating:
+  - app bugs
+  - from Supabase auth/RLS problems
+
+### `c3d7038` Add SwiftUI iOS app and bootstrap Next.js onboarding web app
+
+- This commit did not come from the same linear implementation thread as the
+  Windows fixes.
+- It added the product shell:
+  - iOS caregiver app
+  - Next.js onboarding flow
+- It mattered because the repo was not just a camera project. It preserved the
+  family/caregiver product surface while the recognition stack was still being
+  debugged elsewhere.
+
+### `b4cff0d` Add base64 face upload flow and harden secret hygiene
+
+- This was a key transport change.
+- Before this, the image flow was more file/URI-centric.
+- After this, the receiver could accept `/upload-base64`, and the helper
+  `windows/send_first_face_base64.py` could push a detected face directly as a
+  base64 JSON payload.
+- In code terms, this solved:
+  - easier browser/client uploads
+  - easier first-face testing without multipart file juggling
+  - less dependence on local file paths when moving image data around
+- It also started setting the repo up for safer secret handling.
+
+### `eb9bc05` Add live local face receiver view
+
+- This commit turned the receiver into something visible, not just an endpoint.
+- It added:
+  - a richer root page
+  - camera state
+  - a startup script
+- This solved the “the backend might be running but we cannot quickly tell”
+  problem.
+- It made local validation faster and reduced guesswork during repeated runs.
+
+### `2337100` feat(windows): improve face matching and preview with browser-side camera and embedding normalization
+
+- This commit fixed two subtle but important issues.
+- First, `supabase_known_faces.py` gained embedding normalization logic so that
+  embeddings loaded from Supabase could be parsed even if they came back as JSON
+  strings rather than already-materialized Python lists.
+- Second, `face_receiver.py` gained a browser-camera front end instead of
+  depending only on server-side camera capture.
+- What this solved:
+  - fewer broken loads when Supabase returned embeddings in inconsistent shapes
+  - lower-latency local viewing by letting the browser own the camera preview
+  - a better `/known-faces` JSON/data path for the dashboard
+- This is one of the clearest “previous commit worked, but was still awkward or
+  brittle” improvements.
+
+### `dd5a198` Add vendored base64 CLI and Python helper
+
+- This commit was about deterministic encoding behavior.
+- Instead of relying only on whichever encoder happened to be available, the
+  repo gained:
+  - `scripts/base64_helper.py`
+  - vendored `vendor/progers-base64/cli.js`
+- That set up the next commit, where image storage leaned harder into raw
+  base64 flows.
+
+### `78f28eb` Use progers/base64 for image encoding; add Supabase image base64 insert/update; name new faces `unidentified`
+
+- This changed the Supabase image strategy directly.
+- The code diff shows:
+  - new `insert_image_base64`
+  - `find_image_by_url`
+  - `update_image_by_id`
+  - `update_known_face_photo`
+  - helper functions to encode/decode raw bytes
+- It also changed unknown-face creation to use `person_name="unidentified"`.
+- What this solved:
+  - image records could be inserted and updated without relying only on local
+    file URIs
+  - matched faces finally had a path toward image updates in Supabase
+- What it still did awkwardly:
+  - it sometimes pushed raw base64 into places that later had to be cleaned up
+  - photo reference semantics were still not fully stable
+
+### `349ce49` feat(windows): sync faces to Supabase with raw base64 and update existing matches
+
+- This was the first serious attempt to make matched faces update, not just
+  newly created unknowns.
+- It pushed the live Windows pipeline toward:
+  - raw base64 images
+  - updating existing matches
+  - not just inserting unknowns forever
+- This commit mattered because the later Discord summary at **4:37 PM** still
+  correctly observed that matched-user image updating was not fully correct yet.
+- In other words, this commit introduced the right intention, but the following
+  commits had to make it reliable.
+
+### `39f6c42` Fall detection
+
+- This brought in the earlier GuardianCare branch.
+- Technically it is huge, but the key point is not just size. It added a
+  parallel implementation of the Lumi AI idea:
+  - fall detection
+  - face recognition
+  - iOS app
+  - web app
+  - Supabase client
+- The repo became broader here, but also more historically honest.
+
+### `ae0cf6c` feat: upload `download.jpg` and ensure unknown faces are registered as `unidentified` in Supabase
+
+- This was another direct Supabase validation commit.
+- It added scripts that could push a known sample image and prove whether the
+  insert flow actually worked.
+- This is the kind of commit that only appears when the team is debugging the
+  backend with real payloads instead of theory.
+
+### `0238dc7` feat(dashboard): add real-time event log and telemetry status
+
+- This commit improved observability.
+- The code added:
+  - event log support
+  - telemetry state
+  - richer dashboard status
+- This solved a real hackathon problem:
+  - when uploads or detections failed, the team needed to see where in the
+    pipeline it died
+- It turned the app into something closer to a live debugging console.
+
+### `436ab6b` feat(windows): enhance logging for encoding/uploads and tune sensitivity to prevent duplicates
+
+- This commit used the new telemetry to attack duplicate and sensitivity issues.
+- The diff shows:
+  - server-side event buffers
+  - upload/detection event logging
+  - a lower matching threshold from `0.6` to `0.55`
+  - tighter recent-face distance from `0.25` to `0.20`
+  - a longer repeat window from `45` to `90` seconds
+- That combination says exactly what was going wrong:
+  - duplicates were too easy to produce
+  - the app needed better introspection to see why
+
+### `9ced36a` fix(windows): ensure face uploads occur by decoupling encoding from initial embedding check and reducing cooldown
+
+- This is one of the most concrete bug-fix commits in the repo.
+- Before this patch, the upload loop could skip too early if the embedding check
+  short-circuited, so the face crop never got encoded and sent.
+- The diff literally moves the embedding check so unknown upload encoding still
+  happens in the right branch.
+- It also cuts `save-cooldown` from `10.0` seconds to `5.0`.
+- So the real issue was:
+  - faces were visible
+  - but uploads were sometimes not happening at all
+
+### `ad6a6f9` debug: add verbose logging and continue investigating Supabase sync issues
+
+- This commit is the clearest proof that sync still was not stable after
+  `9ced36a`.
+- It added more logging, which means the prior fix helped but did not fully
+  explain all failures.
+- This is exactly the kind of small debug commit that marks a real live-fire
+  investigation.
+
+### `d6dd6f3` fix(windows): ensure face data is sent to Supabase on matches and rename old entries to unidentified
+
+- This fixed the next bug after unknown uploads:
+  - matched users were not being updated reliably
+- The diff shows:
+  - event log entries when a match is found
+  - explicit matched-face update attempts
+  - fallback image insertion if the old reference is missing
+  - updating the known face’s stored photo after a new image record
+- This is exactly the code-path that the earlier 4:37 PM Discord summary said
+  was still weak.
+
+### `e233891` stable: working face sync to Supabase with unidentified naming and base64 storage
+
+- This commit is the first one that calls the Windows sync path “stable,” and
+  that lines up with the sequence before it.
+- By here, the project had already:
+  - changed image transport
+  - improved observability
+  - fixed missed uploads
+  - fixed matched-face updates
+- So “stable” here reads as earned, not aspirational.
+
+### `78f7a8a` feat(dashboard): add recognized faces gallery with base64 decoding
+
+- Once the sync path mostly worked, the next issue was presentation.
+- This commit made the dashboard/gallery decode and show recognized faces from
+  stored base64 image data.
+- In other words, it solved:
+  - “the face data may be in Supabase”
+  - but “the dashboard still does not render it in a useful way”
+
+### `9484893` Fix face upload errors and wire dashboard entirely to Supabase
+
+- This is the cleanup/final-hardening commit for the Windows face pipeline.
+- The most important code change here was conceptual:
+  - instead of treating `photo_url` as a brittle URL lookup target
+  - it started treating it as an image row id when appropriate
+- `supabase_known_faces.py` gained `find_image_by_id`.
+- `webcam_supabase_live.py` changed `/known-faces` so the gallery fetched the
+  actual image row by id and rendered real base64 content from Supabase.
+- What this solved:
+  - broken gallery rendering
+  - incorrect assumptions about `photo_url`
+  - mixed local/Supabase state in the dashboard
+- This is the commit that most clearly moved the dashboard from “mostly local
+  and patched together” to “really backed by Supabase.”
+
+### `5034da5`, `11a2789`, and `960f8ca`
+
+- These were the documentation and preservation phase.
+- `5034da5` rewrote the README as a hackathon narrative.
+- `11a2789` unpacked the late GuardianCare fall-detection bundle into
+  `guardiancare_late/`.
+- `960f8ca` rewrote the README again using the Discord timeline and actual repo
+  history.
+- These commits matter because the final repo goal was not just “ship code.”
+  It was “preserve the actual journey and all the useful branches of work.”
+
 ## What is in the repo now
 
 ### Current caregiver / app scaffolds
