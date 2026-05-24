@@ -10,6 +10,16 @@
 - Keep it represented in the project history alongside the `guardiancare/` prototype and late `Fall detection` commit.
 - Unpacked into tracked repo folder `guardiancare_late/` after verification.
 - The unpacked bundle contains `fall_detection.py`, `main.py`, `face_recognition_module.py`, `config.py`, `supabase_client.py`, registration images, and a placeholder `.env` converted to `.env.example`.
+- The actual Discord export used for timeline details is `C:\Users\emmad\Downloads\• Discord _ Ronyboxer, Mr.Math1652832, Riyansh, Yowza.html`.
+- Key timestamps from that export:
+  - `10:34 AM`: team rejects the earlier `canvas idea` because it was a `Clunky school interface` with `no hardware component`
+  - `10:37 AM`: explicit product summary appears: `So it will recognize falls and remind you stuff`
+  - `11:34 AM`: FamiliarAI reference shared
+  - `1:20 PM` and `1:48 PM`: public `loca.lt` preview links shared, matching the stream/tunnel phase
+  - `3:48 PM`: OpenPose shared as a later perception/fall-detection escalation path
+  - `4:21 PM`: medication schedule shared
+  - `4:37 PM`: technical summary of the repo shared, including the note that matched users were not yet updating their latest image path
+  - `5:08 PM`: `guardiancare.zip` shared in chat
 
 ## Active branch
 - `windows-face-supabase-match`
