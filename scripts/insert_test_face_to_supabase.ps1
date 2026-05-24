@@ -29,8 +29,6 @@ $memory = New-Object System.IO.MemoryStream
 $bitmap.Save($memory, [System.Drawing.Imaging.ImageFormat]::Png)
 $pngBytes = $memory.ToArray()
 $base64 = [Convert]::ToBase64String($pngBytes)
-$dataUrl = "data:image/png;base64,$base64"
-
 $embedding = @(for ($i = 0; $i -lt 128; $i++) { [Math]::Round($i / 1000.0, 3) })
 $timestamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
 
@@ -38,7 +36,7 @@ $payload = @{
     person_name = "quick-test-face-$timestamp"
     label = "quick-test-face"
     embedding = $embedding
-    photo_url = $dataUrl
+    photo_url = $base64
     last_seen_at = (Get-Date).ToUniversalTime().ToString("o")
 } | ConvertTo-Json -Depth 6
 

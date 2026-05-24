@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -32,6 +33,33 @@ def display_name_for_face(face: dict[str, Any]) -> str:
         or str(face.get("label") or "").strip()
         or str(face.get("id") or "unknown")
     )
+
+
+def normalize_embedding(raw: Any) -> list[float] | None:
+    if isinstance(raw, list):
+        try:
+            values = [float(item) for item in raw]
+        except (TypeError, ValueError):
+            return None
+        return values if values else None
+
+    if isinstance(raw, str):
+        text = raw.strip()
+        if not text:
+            return None
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(parsed, list):
+            return None
+        try:
+            values = [float(item) for item in parsed]
+        except (TypeError, ValueError):
+            return None
+        return values if values else None
+
+    return None
 
 
 @dataclass
@@ -69,10 +97,11 @@ class SupabaseKnownFacesCache:
         raw_faces = response.json()
         normalized: list[dict[str, Any]] = []
         for item in raw_faces:
-            embedding = item.get("embedding")
-            if not isinstance(embedding, list) or not embedding:
+            embedding = normalize_embedding(item.get("embedding"))
+            if not embedding:
                 continue
             item = dict(item)
+            item["embedding"] = embedding
             item["display_name"] = display_name_for_face(item)
             normalized.append(item)
 

@@ -83,6 +83,32 @@ def safe_base64_image_to_bytes(raw: str) -> bytes:
     return base64.b64decode(payload, validate=True)
 
 
+def infer_mime_type_from_base64(raw: str) -> str:
+    payload = raw.strip()
+    if payload.startswith("data:"):
+        semi = payload.find(";")
+        if semi != -1:
+            return payload[5:semi] or "image/jpeg"
+    if payload.startswith("iVBOR"):
+        return "image/png"
+    if payload.startswith("/9j/"):
+        return "image/jpeg"
+    if payload.startswith("UklGR"):
+        return "image/webp"
+    if payload.startswith("R0lGOD"):
+        return "image/gif"
+    return "image/jpeg"
+
+
+def image_src_from_value(raw: str) -> str:
+    value = str(raw or "").strip()
+    if not value:
+        return ""
+    if value.startswith(("data:", "http://", "https://", "file:///")):
+        return value
+    return f"data:{infer_mime_type_from_base64(value)};base64,{value}"
+
+
 def update_camera_state(**changes: Any) -> dict[str, Any]:
     with camera_state_lock:
         camera_state.update(changes)
@@ -118,10 +144,11 @@ def render_known_faces_html(known_faces: list[dict[str, Any]]) -> str:
         label = str(face.get("label") or "").strip()
         display_name = person_name or label or str(face.get("id") or "unknown")
         photo_url = str(face.get("photo_url") or "").strip()
+        photo_src = image_src_from_value(photo_url)
         image_html = (
-            f"<img src='{html.escape(photo_url, quote=True)}' "
+            f"<img src='{html.escape(photo_src, quote=True)}' "
             "style='width:96px;height:96px;object-fit:cover;border-radius:10px;border:1px solid #334;background:#1b222b' />"
-            if photo_url
+            if photo_src
             else "<div style='width:96px;height:96px;border-radius:10px;border:1px solid #334;background:#1b222b;display:flex;align-items:center;justify-content:center;color:#7f90a3'>No image</div>"
         )
         subtitle = person_name if person_name else label
@@ -135,6 +162,25 @@ def render_known_faces_html(known_faces: list[dict[str, Any]]) -> str:
             "</div>"
         )
     return "<div style='display:flex;gap:12px;flex-wrap:wrap'>" + "".join(cards) + "</div>"
+
+
+def known_faces_payload(known_faces: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    payload: list[dict[str, Any]] = []
+    for face in known_faces:
+        person_name = str(face.get("person_name") or "").strip()
+        label = str(face.get("label") or "").strip()
+        display_name = person_name or label or str(face.get("id") or "unknown")
+        payload.append(
+            {
+                "id": face.get("id"),
+                "person_name": person_name,
+                "label": label,
+                "display_name": display_name,
+                "photo_url": str(face.get("photo_url") or "").strip(),
+                "photo_src": image_src_from_value(face.get("photo_url") or ""),
+            }
+        )
+    return payload
 
 
 def ensure_cache() -> SupabaseKnownFacesCache:
@@ -324,7 +370,7 @@ def camera_loop(
                 time.sleep(poll_seconds)
                 continue
 
-            image_base64 = "data:image/jpeg;base64," + base64.b64encode(encoded.tobytes()).decode("ascii")
+            image_base64 = base64.b64encode(encoded.tobytes()).decode("ascii")
             metadata = {
                 "frame_id": f"live-face-{utc_stamp()}",
                 "captured_at": utc_stamp(),
@@ -543,21 +589,24 @@ def index():
         "<h1 style='margin-top:0'>Face Receiver Running</h1>"
         "<div style='display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap'>"
         "<div>"
-        "<img src='/camera/stream' style='width:640px;max-width:90vw;border:1px solid #334;border-radius:12px;background:#1b222b' />"
+        "<video id='live-video' autoplay muted playsinline style='width:640px;max-width:90vw;border:1px solid #334;border-radius:12px;background:#1b222b'></video>"
         "<div style='margin-top:12px;display:flex;gap:10px'>"
-        "<button onclick=\"fetch('/camera/start',{method:'POST'}).then(()=>setTimeout(()=>location.reload(),300))\" style='padding:10px 14px'>Start Camera</button>"
-        "<button onclick=\"fetch('/camera/stop',{method:'POST'}).then(()=>setTimeout(()=>location.reload(),300))\" style='padding:10px 14px'>Stop Camera</button>"
-        "<button onclick='location.reload()' style='padding:10px 14px'>Refresh</button>"
+        "<button onclick='startBrowserCamera()' style='padding:10px 14px'>Start Browser Camera</button>"
+        "<button onclick='stopBrowserCamera()' style='padding:10px 14px'>Stop Browser Camera</button>"
+        "<button onclick=\"cameraAction('/camera/start')\" style='padding:10px 14px'>Start Camera</button>"
+        "<button onclick=\"cameraAction('/camera/stop')\" style='padding:10px 14px'>Stop Camera</button>"
+        "<button onclick='refreshDashboard()' style='padding:10px 14px'>Refresh</button>"
         "</div>"
+        "<p style='margin-top:10px;color:#9fb0c3'>Browser camera preview uses the browser media stack for lower-latency local viewing. Server camera controls remain available for local uploads and matching.</p>"
         "</div>"
         "<div style='min-width:260px'>"
-        f"<p><strong>Known faces:</strong> {len(known_faces)}</p>"
-        f"<p><strong>Metric:</strong> {match_metric}</p>"
-        f"<p><strong>Threshold:</strong> {match_threshold}</p>"
-        f"<p><strong>Camera running:</strong> {camera.get('running')}</p>"
-        f"<p><strong>Uploads sent:</strong> {camera.get('uploads_sent')}</p>"
-        f"<p><strong>Last message:</strong> {camera.get('last_message')}</p>"
-        f"<p><strong>Last error:</strong> {camera.get('last_error') or '-'}</p>"
+        f"<p><strong>Known faces:</strong> <span id='known-faces-count'>{len(known_faces)}</span></p>"
+        f"<p><strong>Metric:</strong> <span id='metric-value'>{match_metric}</span></p>"
+        f"<p><strong>Threshold:</strong> <span id='threshold-value'>{match_threshold}</span></p>"
+        f"<p><strong>Camera running:</strong> <span id='camera-running'>{camera.get('running')}</span></p>"
+        f"<p><strong>Uploads sent:</strong> <span id='uploads-sent'>{camera.get('uploads_sent')}</span></p>"
+        f"<p><strong>Last message:</strong> <span id='last-message'>{html.escape(str(camera.get('last_message') or ''))}</span></p>"
+        f"<p><strong>Last error:</strong> <span id='last-error'>{html.escape(str(camera.get('last_error') or '-'))}</span></p>"
         f"<p><strong>Local network stream:</strong> <a href='http://{local_ip}:5000/camera/stream' style='color:#8cc6ff'>http://{local_ip}:5000/camera/stream</a></p>"
         "<p><a href='/healthz' style='color:#8cc6ff'>/healthz</a></p>"
         "<p><a href='/camera/status' style='color:#8cc6ff'>/camera/status</a></p>"
@@ -567,9 +616,49 @@ def index():
         "<div style='margin-top:28px'>"
         "<h2 style='margin:0 0 12px 0'>Known Faces</h2>"
         "<p style='margin:0 0 14px 0;color:#9fb0c3'>Names come from Supabase `person_name` first, then `label` if no name is present.</p>"
-        f"{known_faces_html}"
+        f"<div id='known-faces-grid'>{known_faces_html}</div>"
         "</div>"
-        "<script>setTimeout(()=>location.reload(),4000)</script>"
+        "<script>"
+        "let browserStream = null;"
+        "function esc(s){return String(s ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('\"','&quot;').replaceAll(\"'\",'&#39;');}"
+        "function knownFaceCard(face){"
+        "const image = face.photo_src ? `<img src='${esc(face.photo_src)}' style=\"width:96px;height:96px;object-fit:cover;border-radius:10px;border:1px solid #334;background:#1b222b\" />` : `<div style=\"width:96px;height:96px;border-radius:10px;border:1px solid #334;background:#1b222b;display:flex;align-items:center;justify-content:center;color:#7f90a3\">No image</div>`;"
+        "const subtitle = face.person_name && face.person_name !== face.display_name ? face.person_name : (face.label && face.label !== face.display_name ? face.label : '');"
+        "return `<div style=\"width:120px;background:#151b22;border:1px solid #2a3440;border-radius:12px;padding:10px\">${image}<div style=\"margin-top:8px;font-weight:600\">${esc(face.display_name)}</div><div style=\"margin-top:4px;color:#9fb0c3;font-size:12px;min-height:28px\">${esc(subtitle)}</div></div>`;"
+        "}"
+        "async function startBrowserCamera(){"
+        "try {"
+        "if (browserStream) return;"
+        "browserStream = await navigator.mediaDevices.getUserMedia({video:true,audio:false});"
+        "document.getElementById('live-video').srcObject = browserStream;"
+        "} catch (err) { alert('Browser camera start failed: ' + err); }"
+        "}"
+        "function stopBrowserCamera(){"
+        "if (!browserStream) return;"
+        "for (const track of browserStream.getTracks()) track.stop();"
+        "document.getElementById('live-video').srcObject = null;"
+        "browserStream = null;"
+        "}"
+        "async function refreshDashboard(){"
+        "const [healthRes, cameraRes, facesRes] = await Promise.all([fetch('/healthz'), fetch('/camera/status'), fetch('/known-faces')]);"
+        "const health = await healthRes.json();"
+        "const camera = await cameraRes.json();"
+        "const faces = await facesRes.json();"
+        "document.getElementById('known-faces-count').textContent = health.known_faces_count;"
+        "document.getElementById('metric-value').textContent = health.metric;"
+        "document.getElementById('threshold-value').textContent = health.threshold;"
+        "document.getElementById('camera-running').textContent = camera.running;"
+        "document.getElementById('uploads-sent').textContent = camera.uploads_sent;"
+        "document.getElementById('last-message').textContent = camera.last_message || '';"
+        "document.getElementById('last-error').textContent = camera.last_error || '-';"
+        "const grid = document.getElementById('known-faces-grid');"
+        "if (!faces.faces.length) { grid.innerHTML = `<p style=\"color:#9fb0c3\">No known faces loaded from Supabase yet.</p>`; }"
+        "else { grid.innerHTML = `<div style=\"display:flex;gap:12px;flex-wrap:wrap\">${faces.faces.map(knownFaceCard).join('')}</div>`; }"
+        "}"
+        "async function cameraAction(url){ await fetch(url,{method:'POST'}); await refreshDashboard(); }"
+        "window.addEventListener('beforeunload', ()=>stopBrowserCamera());"
+        "setInterval(refreshDashboard, 2500);"
+        "</script>"
         "</body></html>"
     )
 
@@ -577,6 +666,12 @@ def index():
 @app.get("/camera/status")
 def camera_status():
     return jsonify(get_camera_state())
+
+
+@app.get("/known-faces")
+def known_faces_route():
+    known_faces = ensure_cache().get_faces()
+    return jsonify({"faces": known_faces_payload(known_faces)})
 
 
 @app.post("/camera/start")

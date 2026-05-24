@@ -52,7 +52,7 @@ def main() -> int:
                 print("[ERROR] Failed to encode face crop")
                 return 1
 
-            image_base64 = "data:image/jpeg;base64," + base64.b64encode(encoded.tobytes()).decode("ascii")
+            image_base64 = base64.b64encode(encoded.tobytes()).decode("ascii")
             payload = {
                 "image_base64": image_base64,
                 "metadata": {
