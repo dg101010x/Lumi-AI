@@ -221,6 +221,7 @@ def try_create_unknown_face(
             image_name=image_name,
             image_base64=image_base64,
         )
+        image_id = image_row.get("id")
         label = "auto-created"
         if description:
             label = f"auto-created: {description[:120]}"
@@ -228,10 +229,10 @@ def try_create_unknown_face(
             embedding=encoding,
             person_name="unidentified",
             label=label,
-            photo_url=image_row.get("image_url", image_base64),
+            photo_url=str(image_id) if image_id is not None else "",
             last_seen_at=datetime.now(timezone.utc).isoformat(),
         )
-        row["image_id"] = image_row.get("id")
+        row["image_id"] = image_id
         row["description"] = description
         return row, None
     except requests.RequestException as exc:
@@ -468,30 +469,41 @@ def webcam_loop(args: argparse.Namespace) -> None:
                                 "description": description,
                             }
                         elif create_error is not None:
+                            err_msg = f"[ERROR] Supabase insert failed: {create_error}"
+                            print(err_msg, flush=True)
+                            add_server_event(err_msg, "system")
                             detection["match"] = {"create_error": create_error}
                     elif status == "matched":
-                        match_info = detection.get("match")
+                        match_info = detection.get("match") or {}
                         display_name = match_info.get("display_name") or "matched"
                         add_server_event(f"Match found: {display_name}", "detection")
-                        
+
                         try:
                             add_server_event(f"Sending updated face for {display_name} to Supabase...", "upload")
-                            img_rec = None
-                            if match_info.get("photo_url"):
-                                img_rec = cache.find_image_by_url(image_url=match_info["photo_url"])
-                            
-                            if img_rec:
-                                cache.update_image_by_id(image_id=img_rec["id"], image_base64=face_base64)
+                            photo_url = match_info.get("photo_url") or ""
+                            img_id = int(photo_url) if photo_url.isdigit() else None
+
+                            if img_id is not None:
+                                cache.update_image_by_id(image_id=img_id, image_base64=face_base64)
                             else:
-                                # Create new image record if missing or URL was local
-                                new_img = cache.insert_image_base64(image_name=f"update-{display_name}-{utc_stamp()}", image_base64=face_base64)
-                                cache.update_known_face_photo(face_id=match_info["id"], photo_url=new_img["image_url"])
-                            
+                                # No stored image id — insert a new image row and update the reference
+                                new_img = cache.insert_image_base64(
+                                    image_name=f"update-{display_name}-{utc_stamp()}",
+                                    image_base64=face_base64,
+                                )
+                                new_img_id = new_img.get("id")
+                                if new_img_id and match_info.get("id"):
+                                    cache.update_known_face_photo(
+                                        face_id=match_info["id"],
+                                        photo_url=str(new_img_id),
+                                    )
+
                             add_server_event(f"Supabase update complete for {display_name}", "upload")
                         except Exception as exc:
-                            print(f"[ERROR] Failed to update matched face: {exc}")
+                            err_msg = f"[ERROR] Failed to update matched face: {exc}"
+                            print(err_msg, flush=True)
                             detection["update_error"] = str(exc)
-                            add_server_event(f"Failed to update {display_name}: {str(exc)[:50]}", "system")
+                            add_server_event(f"Failed to update {display_name}: {str(exc)[:80]}", "system")
 
                     detection.pop("embedding", None)
 
