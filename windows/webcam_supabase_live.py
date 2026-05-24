@@ -521,6 +521,30 @@ def webcam_loop(args: argparse.Namespace) -> None:
         cap.release()
 
 
+@app.get("/known-faces")
+def get_known_faces():
+    cache = SupabaseKnownFacesCache(
+        project_url=app.config["PROJECT_URL"],
+        api_key=app.config["API_KEY"]
+    )
+    faces = cache.get_faces(force=True)
+    payload = []
+    for f in faces:
+        photo_url = f.get("photo_url") or ""
+        img_src = photo_url
+        if photo_url and not photo_url.startswith(("http", "data:", "file:")):
+            img_src = f"data:image/jpeg;base64,{photo_url}"
+        
+        payload.append({
+            "id": f.get("id"),
+            "name": f.get("display_name"),
+            "date": f.get("last_seen_at") or f.get("created_at"),
+            "src": img_src
+        })
+    payload.sort(key=lambda x: x["date"] or "", reverse=True)
+    return jsonify(payload)
+
+
 @app.get("/")
 def index() -> str:
     return """<!doctype html>
@@ -531,56 +555,73 @@ def index() -> str:
     <title>Aegis Live View</title>
     <style>
       body { font-family: system-ui, sans-serif; background:#0d1117; color:#e6edf3; margin:0; padding:24px; }
-      .wrap { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 1fr 350px; gap: 24px; }
+      .wrap { max-width: 1200px; margin: 0 auto; }
       h1 { margin-top: 0; color: #58a6ff; }
-      img { width:100%; border-radius:12px; background:#000; border:1px solid #30363d; }
+      img.stream { width:100%; border-radius:12px; background:#000; border:1px solid #30363d; }
       .card { background:#161b22; padding:20px; border-radius:12px; border:1px solid #30363d; margin-bottom: 24px; }
-      .log-container { background:#0d1117; border-radius:8px; height: 400px; overflow-y: auto; padding: 12px; font-family: monospace; font-size: 13px; border: 1px solid #30363d; }
+      .log-container { background:#0d1117; border-radius:8px; height: 350px; overflow-y: auto; padding: 12px; font-family: monospace; font-size: 13px; border: 1px solid #30363d; }
       .log-entry { margin-bottom: 8px; border-left: 3px solid #30363d; padding-left: 10px; }
       .log-time { color: #8b949e; margin-right: 8px; }
       .log-msg { color: #c9d1d9; }
       .log-type-detection { border-left-color: #238636; }
       .log-type-upload { border-left-color: #1f6feb; }
       .log-type-system { border-left-color: #8b949e; }
-      .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+      .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 12px; }
       .stat-item { background: #0d1117; padding: 10px; border-radius: 6px; border: 1px solid #30363d; }
       .stat-label { font-size: 12px; color: #8b949e; display: block; }
       .stat-value { font-size: 16px; font-weight: bold; color: #58a6ff; }
+      
+      .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; margin-top: 20px; }
+      .face-card { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 10px; text-align: center; }
+      .face-card img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 4px; margin-bottom: 8px; background: #161b22; }
+      .face-name { font-weight: bold; display: block; font-size: 14px; color: #58a6ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .face-date { font-size: 11px; color: #8b949e; }
+
       code { color:#7ee787; }
-      @media (max-width: 900px) { .wrap { grid-template-columns: 1fr; } }
+      @media (max-width: 900px) { .main-content { grid-template-columns: 1fr !important; } }
     </style>
   </head>
   <body>
     <div class="wrap">
-      <main>
-        <div class="card">
-          <h1>Aegis Live View</h1>
-          <img src="/stream.mjpg" alt="Live webcam stream">
-          <div class="stat-grid">
-            <div class="stat-item"><span class="stat-label">Status</span><span id="stat-ok" class="stat-value">...</span></div>
-            <div class="stat-item"><span class="stat-label">Known Faces</span><span id="stat-faces" class="stat-value">...</span></div>
-            <div class="stat-item"><span class="stat-label">Latest Match</span><span id="stat-match" class="stat-value">None</span></div>
-            <div class="stat-item"><span class="stat-label">Metric</span><span id="stat-metric" class="stat-value">...</span></div>
+      <div class="main-content" style="display: grid; grid-template-columns: 1fr 350px; gap: 24px;">
+        <main>
+          <div class="card">
+            <h1>Aegis Live View</h1>
+            <img src="/stream.mjpg" alt="Live webcam stream" class="stream">
+            <div class="stat-grid">
+              <div class="stat-item"><span class="stat-label">Status</span><span id="stat-ok" class="stat-value">...</span></div>
+              <div class="stat-item"><span class="stat-label">Known Faces</span><span id="stat-faces" class="stat-value">...</span></div>
+              <div class="stat-item"><span class="stat-label">Latest Match</span><span id="stat-match" class="stat-value">None</span></div>
+              <div class="stat-item"><span class="stat-label">Metric</span><span id="stat-metric" class="stat-value">...</span></div>
+            </div>
           </div>
-        </div>
-      </main>
-      <aside>
-        <div class="card">
-          <h3>Event Log</h3>
-          <div id="event-log" class="log-container">
-            <div class="log-entry log-type-system"><span class="log-time">--:--:--</span><span class="log-msg">Connecting to telemetry...</span></div>
+        </main>
+        <aside>
+          <div class="card">
+            <h3>Event Log</h3>
+            <div id="event-log" class="log-container">
+              <div class="log-entry log-type-system"><span class="log-time">--:--:--</span><span class="log-msg">Connecting...</span></div>
+            </div>
           </div>
+          <div class="card">
+            <h3>Telemetry</h3>
+            <p>Health: <code>/healthz</code></p>
+            <p>Host: <code id="local-ip">loading...</code></p>
+          </div>
+        </aside>
+      </div>
+
+      <div class="card">
+        <h3>Recognized Faces (Supabase)</h3>
+        <div id="face-gallery" class="gallery">
+          <p style="color: #8b949e;">Loading gallery...</p>
         </div>
-        <div class="card">
-          <h3>Telemetry</h3>
-          <p>Health: <code>/healthz</code></p>
-          <p>Local IP: <code id="local-ip">loading...</code></p>
-        </div>
-      </aside>
+      </div>
     </div>
 
     <script>
       const logEl = document.getElementById('event-log');
+      const galleryEl = document.getElementById('face-gallery');
       const stats = {
         ok: document.getElementById('stat-ok'),
         faces: document.getElementById('stat-faces'),
@@ -609,30 +650,46 @@ def index() -> str:
           stats.faces.textContent = data.known_faces_count;
           stats.metric.textContent = data.metric.toUpperCase();
           
-          // Add server-side events
           if (data.events && data.events.length > lastSeenEventsCount) {
              const newEvents = data.events.slice(lastSeenEventsCount);
              newEvents.forEach(ev => addLog(ev.message, ev.type));
              lastSeenEventsCount = data.events.length;
+             if (newEvents.some(ev => ev.type === 'upload')) refreshGallery();
           }
 
           if (data.detections && data.detections.length > 0) {
             data.detections.forEach(det => {
-              const name = det.match ? (det.match.display_name || det.match.person_name) : 'unknown';
               if (det.status === 'matched') {
-                stats.match.textContent = name;
+                stats.match.textContent = det.match ? (det.match.display_name || det.match.person_name) : 'unidentified';
               }
             });
           }
-        } catch (e) {
-          console.error('Telemetry error:', e);
-        }
+        } catch (e) { console.error(e); }
+      }
+
+      async function refreshGallery() {
+        try {
+          const resp = await fetch('/known-faces');
+          const faces = await resp.json();
+          if (faces.length === 0) {
+            galleryEl.innerHTML = '<p style="color: #8b949e;">No faces found in database.</p>';
+            return;
+          }
+          galleryEl.innerHTML = faces.map(f => `
+            <div class="face-card">
+              <img src="${f.src || ''}" onerror="this.src='https://via.placeholder.com/150?text=No+Image'">
+              <span class="face-name">${f.name}</span>
+              <span class="face-date">${new Date(f.date).toLocaleString()}</span>
+            </div>
+          `).join('');
+        } catch (e) { console.error('Gallery error:', e); }
       }
 
       addLog('System initialized.');
       setInterval(poll, 2000);
+      refreshGallery();
+      setInterval(refreshGallery, 30000);
       
-      // Get IP on load
       fetch('/healthz').then(r => r.json()).then(d => {
          stats.ip.textContent = location.host;
       });
@@ -697,6 +754,8 @@ def main() -> int:
     args = parser.parse_args()
 
     app.config["IMAGE_DIR"] = str(Path(args.save_dir).resolve())
+    app.config["PROJECT_URL"] = args.project_url
+    app.config["API_KEY"] = args.api_key
     if not args.image_base_url:
         args.image_base_url = f"http://{discover_local_ipv4()}:{args.port}"
 
