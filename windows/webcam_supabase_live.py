@@ -1,0 +1,786 @@
+from __future__ import annotations
+
+import argparse
+import base64
+import json
+import socket
+import subprocess
+import threading
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+import cv2
+import face_recognition
+import requests
+from flask import Flask, Response, jsonify
+
+from face_matching import choose_best_match, distance_for_metric
+from supabase_known_faces import SupabaseKnownFacesCache
+
+
+DEFAULT_PROJECT_URL = "https://gmmpltgvtonpnrfckrvy.supabase.co"
+
+app = Flask(__name__)
+state_lock = threading.Lock()
+latest_jpeg: bytes | None = None
+latest_status: dict[str, Any] = {"ok": False, "message": "not started"}
+recent_faces: list[dict[str, Any]] = []
+server_events: list[dict[str, Any]] = []
+
+
+def utc_stamp() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def add_server_event(message: str, event_type: str = "system") -> None:
+    global server_events
+    with state_lock:
+        server_events.append({
+            "time": datetime.now().strftime("%H:%M:%S"),
+            "message": message,
+            "type": event_type
+        })
+        if len(server_events) > 50:
+            server_events.pop(0)
+
+
+def discover_local_ipv4() -> str:
+    try:
+        hostname = socket.gethostname()
+        for info in socket.getaddrinfo(hostname, None, family=socket.AF_INET):
+            address = info[4][0]
+            if not address.startswith("127."):
+                return address
+    except OSError:
+        pass
+    return "127.0.0.1"
+
+
+def draw_label(frame, text: str, left: int, top: int, color: tuple[int, int, int]) -> None:
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    scale = 0.6
+    thickness = 2
+    (tw, th), baseline = cv2.getTextSize(text, font, scale, thickness)
+    box_top = max(0, top - th - baseline - 8)
+    box_bottom = max(top, th + baseline + 8)
+    box_right = left + tw + 14
+    cv2.rectangle(frame, (left, box_top), (box_right, box_bottom), (0, 0, 0), -1)
+    cv2.putText(frame, text, (left + 7, box_bottom - baseline - 3), font, scale, color, thickness)
+
+
+def save_detection_with_paths(output_dir: Path, frame, payload: dict[str, Any]) -> tuple[Path, Path]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    stamp = utc_stamp()
+    image_path = output_dir / f"{stamp}.jpg"
+    json_path = output_dir / f"{stamp}.json"
+    cv2.imwrite(str(image_path), frame)
+    json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return image_path, json_path
+
+
+def jpg_bytes_for_frame(frame, quality: int = 85) -> bytes | None:
+    ok, encoded = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
+    if not ok:
+        return None
+    return encoded.tobytes()
+
+
+def set_latest_jpeg(frame, quality: int = 80) -> None:
+    global latest_jpeg
+    ok, encoded = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
+    if not ok:
+        return
+    with state_lock:
+        latest_jpeg = encoded.tobytes()
+
+
+def set_status(payload: dict[str, Any]) -> None:
+    global latest_status
+    with state_lock:
+        latest_status = payload
+
+
+def get_status() -> dict[str, Any]:
+    with state_lock:
+        status = dict(latest_status)
+        status["events"] = list(server_events)
+        return status
+
+
+def prune_recent_faces(now_ts: float, recent_seconds: float) -> None:
+    global recent_faces
+    recent_faces = [item for item in recent_faces if (now_ts - float(item["seen_at"])) <= recent_seconds]
+
+
+def check_recent_face(
+    embedding: list[float],
+    *,
+    metric: str,
+    now_ts: float,
+    recent_seconds: float,
+    recent_distance_threshold: float,
+) -> dict[str, Any] | None:
+    prune_recent_faces(now_ts, recent_seconds)
+    for item in recent_faces:
+        try:
+            distance = distance_for_metric(embedding, item["embedding"], metric)
+        except ValueError:
+            continue
+        if distance <= recent_distance_threshold:
+            return {
+                "status": "recently_seen",
+                "distance": float(distance),
+                "display_name": item.get("display_name"),
+            }
+    return None
+
+
+def mark_recent_face(embedding: list[float], display_name: str, now_ts: float) -> None:
+    recent_faces.append(
+        {
+            "embedding": embedding,
+            "display_name": display_name,
+            "seen_at": now_ts,
+        }
+    )
+
+
+def describe_face_with_gemini(face_crop_bgr, api_key: str) -> str | None:
+    image_bytes = jpg_bytes_for_frame(face_crop_bgr, quality=80)
+    if not image_bytes:
+        return None
+
+    prompt = (
+        "Describe this person briefly for a naming prompt. "
+        "Use one short sentence with visible features only, such as hair, glasses, clothing color, or position. "
+        "Do not guess race, ethnicity, age, gender identity, health, or emotions."
+    )
+
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        "gemini-1.5-flash:generateContent"
+    )
+    headers = {"Content-Type": "application/json"}
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": prompt},
+                    {
+                        "inline_data": {
+                            "mime_type": "image/jpeg",
+                            "data": base64.b64encode(image_bytes).decode("ascii"),
+                        }
+                    },
+                ]
+            }
+        ]
+    }
+
+    response = requests.post(url, params={"key": api_key}, headers=headers, json=payload, timeout=30)
+    response.raise_for_status()
+    body = response.json()
+    candidates = body.get("candidates", [])
+    if not candidates:
+        return None
+    parts = candidates[0].get("content", {}).get("parts", [])
+    for part in parts:
+        text = part.get("text")
+        if text:
+            return text.strip()
+    return None
+
+
+def speak_windows_message(message: str) -> None:
+    escaped = message.replace("'", "''")
+    script = (
+        "Add-Type -AssemblyName System.Speech; "
+        "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+        f"$s.Speak('{escaped}')"
+    )
+    subprocess.Popen(
+        ["powershell", "-NoProfile", "-Command", script],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def try_create_unknown_face(
+    cache: SupabaseKnownFacesCache,
+    *,
+    encoding: list[float],
+    image_base64: str,
+    image_name: str,
+    description: str | None,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    stamp = utc_stamp()
+    try:
+        image_row = cache.insert_image_base64(
+            image_name=image_name,
+            image_base64=image_base64,
+        )
+        image_id = image_row.get("id")
+        label = "auto-created"
+        if description:
+            label = f"auto-created: {description[:120]}"
+        row = cache.insert_known_face(
+            embedding=encoding,
+            person_name="unidentified",
+            label=label,
+            photo_url=str(image_id) if image_id is not None else "",
+            last_seen_at=datetime.now(timezone.utc).isoformat(),
+        )
+        row["image_id"] = image_id
+        row["description"] = description
+        return row, None
+    except requests.RequestException as exc:
+        response = exc.response
+        body = response.text if response is not None else ""
+        return None, {
+            "type": "supabase_insert_failed",
+            "message": str(exc),
+            "response_text": body[:500],
+        }
+    except Exception as exc:
+        return None, {
+            "type": "unexpected_insert_failure",
+            "message": str(exc),
+        }
+
+
+def webcam_loop(args: argparse.Namespace) -> None:
+    device = int(args.device) if str(args.device).isdigit() else args.device
+    cap = cv2.VideoCapture(device)
+    if not cap.isOpened():
+        set_status({"ok": False, "message": f"Could not open camera device: {args.device}"})
+        return
+
+    cache = SupabaseKnownFacesCache(
+        project_url=args.project_url,
+        api_key=args.api_key,
+        table_name=args.table_name,
+        refresh_seconds=args.refresh_seconds,
+    )
+    output_dir = Path(args.save_dir)
+    last_save_ts = 0.0
+    frame_index = 0
+    latest_processed_detections: list[dict[str, Any]] = []
+
+    try:
+        known_faces = cache.get_faces(force=True)
+        set_status(
+            {
+                "ok": True,
+                "message": "running",
+                "known_faces_count": len(known_faces),
+                "metric": args.metric,
+                "threshold": args.threshold,
+                "output_dir": str(output_dir.resolve()),
+            }
+        )
+
+        while True:
+            ok, frame = cap.read()
+            if not ok:
+                set_status({"ok": False, "message": "camera read failed"})
+                time.sleep(0.25)
+                continue
+
+            frame_index += 1
+            annotated = frame.copy()
+            detections = latest_processed_detections
+
+            if frame_index % args.process_every_n == 0:
+                known_faces = cache.get_faces()
+                small = cv2.resize(frame, (0, 0), fx=args.detect_scale, fy=args.detect_scale)
+                rgb_small = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
+                boxes_small = face_recognition.face_locations(rgb_small, model="hog")
+                encodings = face_recognition.face_encodings(rgb_small, boxes_small)
+                detections = []
+                print(f"[DEBUG] Frame {frame_index}: Found {len(boxes_small)} face(s)")
+
+                for (top_s, right_s, bottom_s, left_s), encoding in zip(boxes_small, encodings):
+                    scale = 1.0 / args.detect_scale
+                    top = int(top_s * scale)
+                    right = int(right_s * scale)
+                    bottom = int(bottom_s * scale)
+                    left = int(left_s * scale)
+                    encoding_list = encoding.tolist()
+                    now_ts = datetime.now(timezone.utc).timestamp()
+                    recent = check_recent_face(
+                        encoding_list,
+                        metric=args.metric,
+                        now_ts=now_ts,
+                        recent_seconds=args.recent_seconds,
+                        recent_distance_threshold=args.recent_distance,
+                    )
+                    if recent is not None:
+                        detections.append(
+                            {
+                                "box": {"top": top, "right": right, "bottom": bottom, "left": left},
+                                "status": "recently_seen",
+                                "distance": recent["distance"],
+                                "metric": args.metric,
+                                "threshold": args.threshold,
+                                "embedding": encoding_list,
+                                "match": {"display_name": recent.get("display_name")},
+                            }
+                        )
+                        continue
+
+                    best = choose_best_match(
+                        encoding_list,
+                        known_faces,
+                        threshold=args.threshold,
+                        metric=args.metric,
+                    )
+
+                    if best and best["matched"]:
+                        person = best["person"]
+                        mark_recent_face(encoding_list, person.get("display_name") or "matched", now_ts)
+                        match_payload = {
+                            "id": person.get("id"),
+                            "display_name": person.get("display_name"),
+                            "person_name": person.get("person_name"),
+                            "label": person.get("label"),
+                            "photo_url": person.get("photo_url"),
+                        }
+                        detections.append(
+                            {
+                                "box": {"top": top, "right": right, "bottom": bottom, "left": left},
+                                "status": "matched",
+                                "distance": best["distance"],
+                                "metric": args.metric,
+                                "threshold": args.threshold,
+                                "embedding": encoding_list,
+                                "match": match_payload,
+                            }
+                        )
+                    else:
+                        detections.append(
+                            {
+                                "box": {"top": top, "right": right, "bottom": bottom, "left": left},
+                                "status": "unknown",
+                                "distance": best["distance"] if best else None,
+                                "metric": args.metric,
+                                "threshold": args.threshold,
+                                "embedding": encoding_list,
+                                "match": None,
+                            }
+                        )
+
+                latest_processed_detections = detections
+
+            for detection in detections:
+                box = detection["box"]
+                top = int(box["top"])
+                right = int(box["right"])
+                bottom = int(box["bottom"])
+                left = int(box["left"])
+                status = detection["status"]
+                distance = detection.get("distance")
+                if status == "matched":
+                    text = f"{detection['match'].get('display_name') or 'matched'} {distance:.3f}"
+                    color = (0, 255, 0)
+                elif status == "recently_seen":
+                    text = f"recent {distance:.3f}"
+                    color = (255, 165, 0)
+                elif status == "created":
+                    text = f"created {detection['match'].get('display_name') or 'new'}"
+                    color = (255, 255, 0)
+                else:
+                    text = f"unknown {distance:.3f}" if distance is not None else "unknown"
+                    color = (0, 0, 255)
+                cv2.rectangle(annotated, (left, top), (right, bottom), color, 2)
+                draw_label(annotated, text, left, top, color)
+
+            payload = {
+                "ok": True,
+                "message": "running",
+                "captured_at": utc_stamp(),
+                "known_faces_count": len(known_faces),
+                "detections": detections,
+                "metric": args.metric,
+                "threshold": args.threshold,
+            }
+            set_status(payload)
+
+            if detections and (time.time() - last_save_ts) >= args.save_cooldown:
+                print(f"[DEBUG] Entering upload block with {len(detections)} detections")
+                image_path, json_path = save_detection_with_paths(output_dir, annotated, payload)
+                for detection in detections:
+                    status = detection.get("status")
+                    print(f"[DEBUG] Processing detection status: {status}")
+                    
+                    # Prepare face crop base64 (clean, no prefix)
+                    box = detection["box"]
+                    face_crop = frame[
+                        max(0, int(box["top"])):max(0, int(box["bottom"])),
+                        max(0, int(box["left"])):max(0, int(box["right"])),
+                    ]
+                    if face_crop.size == 0:
+                        continue
+                    
+                    crop_bytes = jpg_bytes_for_frame(face_crop, quality=85)
+                    if not crop_bytes:
+                        continue
+                    face_base64 = base64.b64encode(crop_bytes).decode("ascii")
+
+                    if status == "unknown":
+                        detection_embedding = detection.get("embedding")
+                        if not isinstance(detection_embedding, list) or not detection_embedding:
+                             continue
+                        
+                        add_server_event("Encoding unknown face crop to Base64...", "upload")
+                        created_row, create_error = try_create_unknown_face(
+                            cache,
+                            encoding=detection_embedding,
+                            image_base64=face_base64,
+                            image_name=image_path.stem,
+                            description=None,
+                        )
+                        if created_row is not None:
+                            add_server_event(f"Successfully sent 'unidentified' to Supabase. ID: {created_row.get('id')}", "upload")
+                            description = None
+                            if args.gemini_api_key:
+                                try:
+                                    description = describe_face_with_gemini(face_crop, args.gemini_api_key)
+                                except requests.RequestException as exc:
+                                    detection["gemini_error"] = str(exc)
+                            if description:
+                                speak_windows_message(
+                                    f"After this message, say the name of the person who is {description}"
+                                )
+                            mark_recent_face(
+                                detection_embedding,
+                                created_row.get("display_name") or created_row.get("person_name") or "created",
+                                datetime.now(timezone.utc).timestamp(),
+                            )
+                            detection["status"] = "created"
+                            detection["match"] = {
+                                "id": created_row.get("id"),
+                                "display_name": created_row.get("display_name"),
+                                "person_name": created_row.get("person_name"),
+                                "label": created_row.get("label"),
+                                "photo_url": created_row.get("photo_url"),
+                                "image_id": created_row.get("image_id"),
+                                "description": description,
+                            }
+                        elif create_error is not None:
+                            err_msg = f"[ERROR] Supabase insert failed: {create_error}"
+                            print(err_msg, flush=True)
+                            add_server_event(err_msg, "system")
+                            detection["match"] = {"create_error": create_error}
+                    elif status == "matched":
+                        match_info = detection.get("match") or {}
+                        display_name = match_info.get("display_name") or "matched"
+                        add_server_event(f"Match found: {display_name}", "detection")
+
+                        try:
+                            add_server_event(f"Sending updated face for {display_name} to Supabase...", "upload")
+                            photo_url = match_info.get("photo_url") or ""
+                            img_id = int(photo_url) if photo_url.isdigit() else None
+
+                            if img_id is not None:
+                                cache.update_image_by_id(image_id=img_id, image_base64=face_base64)
+                            else:
+                                # No stored image id — insert a new image row and update the reference
+                                new_img = cache.insert_image_base64(
+                                    image_name=f"update-{display_name}-{utc_stamp()}",
+                                    image_base64=face_base64,
+                                )
+                                new_img_id = new_img.get("id")
+                                if new_img_id and match_info.get("id"):
+                                    cache.update_known_face_photo(
+                                        face_id=match_info["id"],
+                                        photo_url=str(new_img_id),
+                                    )
+
+                            add_server_event(f"Supabase update complete for {display_name}", "upload")
+                        except Exception as exc:
+                            err_msg = f"[ERROR] Failed to update matched face: {exc}"
+                            print(err_msg, flush=True)
+                            detection["update_error"] = str(exc)
+                            add_server_event(f"Failed to update {display_name}: {str(exc)[:80]}", "system")
+
+                    detection.pop("embedding", None)
+
+                for detection in detections:
+                    detection.pop("embedding", None)
+                json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+                last_save_ts = time.time()
+            else:
+                for detection in detections:
+                    detection.pop("embedding", None)
+
+            set_latest_jpeg(annotated, args.jpeg_quality)
+            time.sleep(max(0.0, 1.0 / max(args.fps, 0.1)))
+    finally:
+        cap.release()
+
+
+@app.get("/known-faces")
+def get_known_faces():
+    cache = SupabaseKnownFacesCache(
+        project_url=app.config["PROJECT_URL"],
+        api_key=app.config["API_KEY"]
+    )
+    faces = cache.get_faces(force=True)
+    payload = []
+    for f in faces:
+        photo_url = f.get("photo_url") or ""
+        img_src = ""
+
+        if photo_url.isdigit():
+            # photo_url stores the Supabase images.id — fetch real base64
+            try:
+                img_row = cache.find_image_by_id(image_id=int(photo_url))
+                if img_row:
+                    b64 = img_row.get("image_url") or ""
+                    if b64:
+                        img_src = f"data:image/jpeg;base64,{b64}"
+            except Exception:
+                pass
+        elif photo_url.startswith("data:"):
+            img_src = photo_url
+        elif photo_url.startswith("http"):
+            img_src = photo_url
+
+        payload.append({
+            "id": f.get("id"),
+            "name": f.get("display_name"),
+            "date": f.get("last_seen_at") or f.get("created_at"),
+            "src": img_src,
+        })
+    payload.sort(key=lambda x: x["date"] or "", reverse=True)
+    return jsonify(payload)
+
+
+@app.get("/")
+def index() -> str:
+    return """<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Aegis Live View</title>
+    <style>
+      body { font-family: system-ui, sans-serif; background:#0d1117; color:#e6edf3; margin:0; padding:24px; }
+      .wrap { max-width: 1200px; margin: 0 auto; }
+      h1 { margin-top: 0; color: #58a6ff; }
+      img.stream { width:100%; border-radius:12px; background:#000; border:1px solid #30363d; }
+      .card { background:#161b22; padding:20px; border-radius:12px; border:1px solid #30363d; margin-bottom: 24px; }
+      .log-container { background:#0d1117; border-radius:8px; height: 350px; overflow-y: auto; padding: 12px; font-family: monospace; font-size: 13px; border: 1px solid #30363d; }
+      .log-entry { margin-bottom: 8px; border-left: 3px solid #30363d; padding-left: 10px; }
+      .log-time { color: #8b949e; margin-right: 8px; }
+      .log-msg { color: #c9d1d9; }
+      .log-type-detection { border-left-color: #238636; }
+      .log-type-upload { border-left-color: #1f6feb; }
+      .log-type-system { border-left-color: #8b949e; }
+      .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 12px; }
+      .stat-item { background: #0d1117; padding: 10px; border-radius: 6px; border: 1px solid #30363d; }
+      .stat-label { font-size: 12px; color: #8b949e; display: block; }
+      .stat-value { font-size: 16px; font-weight: bold; color: #58a6ff; }
+      
+      .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; margin-top: 20px; }
+      .face-card { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 10px; text-align: center; }
+      .face-card img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 4px; margin-bottom: 8px; background: #161b22; }
+      .face-name { font-weight: bold; display: block; font-size: 14px; color: #58a6ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .face-date { font-size: 11px; color: #8b949e; }
+
+      code { color:#7ee787; }
+      @media (max-width: 900px) { .main-content { grid-template-columns: 1fr !important; } }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="main-content" style="display: grid; grid-template-columns: 1fr 350px; gap: 24px;">
+        <main>
+          <div class="card">
+            <h1>Aegis Live View</h1>
+            <img src="/stream.mjpg" alt="Live webcam stream" class="stream">
+            <div class="stat-grid">
+              <div class="stat-item"><span class="stat-label">Status</span><span id="stat-ok" class="stat-value">...</span></div>
+              <div class="stat-item"><span class="stat-label">Known Faces</span><span id="stat-faces" class="stat-value">...</span></div>
+              <div class="stat-item"><span class="stat-label">Latest Match</span><span id="stat-match" class="stat-value">None</span></div>
+              <div class="stat-item"><span class="stat-label">Metric</span><span id="stat-metric" class="stat-value">...</span></div>
+            </div>
+          </div>
+        </main>
+        <aside>
+          <div class="card">
+            <h3>Event Log</h3>
+            <div id="event-log" class="log-container">
+              <div class="log-entry log-type-system"><span class="log-time">--:--:--</span><span class="log-msg">Connecting...</span></div>
+            </div>
+          </div>
+          <div class="card">
+            <h3>Telemetry</h3>
+            <p>Health: <code>/healthz</code></p>
+            <p>Host: <code id="local-ip">loading...</code></p>
+          </div>
+        </aside>
+      </div>
+
+      <div class="card">
+        <h3>Recognized Faces (Supabase)</h3>
+        <div id="face-gallery" class="gallery">
+          <p style="color: #8b949e;">Loading gallery...</p>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const logEl = document.getElementById('event-log');
+      const galleryEl = document.getElementById('face-gallery');
+      const stats = {
+        ok: document.getElementById('stat-ok'),
+        faces: document.getElementById('stat-faces'),
+        match: document.getElementById('stat-match'),
+        metric: document.getElementById('stat-metric'),
+        ip: document.getElementById('local-ip')
+      };
+
+      function addLog(message, type = 'system') {
+        const entry = document.createElement('div');
+        entry.className = `log-entry log-type-${type}`;
+        const time = new Date().toLocaleTimeString();
+        entry.innerHTML = `<span class="log-time">${time}</span><span class="log-msg">${message}</span>`;
+        logEl.prepend(entry);
+        if (logEl.children.length > 50) logEl.removeChild(logEl.lastChild);
+      }
+
+      let lastSeenEventsCount = 0;
+
+      async function poll() {
+        try {
+          const resp = await fetch('/healthz');
+          const data = await resp.json();
+          
+          stats.ok.textContent = data.ok ? 'RUNNING' : 'ERROR';
+          stats.faces.textContent = data.known_faces_count;
+          stats.metric.textContent = data.metric.toUpperCase();
+          
+          if (data.events && data.events.length > lastSeenEventsCount) {
+             const newEvents = data.events.slice(lastSeenEventsCount);
+             newEvents.forEach(ev => addLog(ev.message, ev.type));
+             lastSeenEventsCount = data.events.length;
+             if (newEvents.some(ev => ev.type === 'upload')) refreshGallery();
+          }
+
+          if (data.detections && data.detections.length > 0) {
+            data.detections.forEach(det => {
+              if (det.status === 'matched') {
+                stats.match.textContent = det.match ? (det.match.display_name || det.match.person_name) : 'unidentified';
+              }
+            });
+          }
+        } catch (e) { console.error(e); }
+      }
+
+      async function refreshGallery() {
+        try {
+          const resp = await fetch('/known-faces');
+          const faces = await resp.json();
+          if (faces.length === 0) {
+            galleryEl.innerHTML = '<p style="color: #8b949e;">No faces found in database.</p>';
+            return;
+          }
+          galleryEl.innerHTML = faces.map(f => `
+            <div class="face-card">
+              <img src="${f.src || ''}" onerror="this.src='https://via.placeholder.com/150?text=No+Image'">
+              <span class="face-name">${f.name}</span>
+              <span class="face-date">${new Date(f.date).toLocaleString()}</span>
+            </div>
+          `).join('');
+        } catch (e) { console.error('Gallery error:', e); }
+      }
+
+      addLog('System initialized.');
+      setInterval(poll, 2000);
+      refreshGallery();
+      setInterval(refreshGallery, 30000);
+      
+      fetch('/healthz').then(r => r.json()).then(d => {
+         stats.ip.textContent = location.host;
+      });
+    </script>
+  </body>
+</html>"""
+
+
+@app.get("/healthz")
+def healthz():
+    return jsonify(get_status())
+
+
+@app.get("/stream.mjpg")
+def stream():
+    def generate():
+        boundary = b"--frame\r\n"
+        while True:
+            with state_lock:
+                frame = latest_jpeg
+            if frame is None:
+                time.sleep(0.1)
+                continue
+            yield boundary
+            yield b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
+            time.sleep(0.03)
+
+    return Response(generate(), mimetype="multipart/x-mixed-replace; boundary=frame")
+
+
+@app.get("/images/<filename>")
+def get_saved_image(filename: str):
+    from flask import send_from_directory
+
+    image_dir = Path(app.config["IMAGE_DIR"])
+    return send_from_directory(image_dir, filename)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Run local webcam matching against Supabase and expose a live MJPEG preview."
+    )
+    parser.add_argument("--device", default="0", help="OpenCV camera index. Default: 0")
+    parser.add_argument("--project-url", default=DEFAULT_PROJECT_URL, help="Supabase project URL")
+    parser.add_argument("--api-key", required=True, help="Supabase service or publishable key")
+    parser.add_argument("--table-name", default="known_faces", help="Supabase known faces table")
+    parser.add_argument("--metric", choices=("euclidean", "cosine"), default="euclidean")
+    parser.add_argument("--threshold", type=float, default=0.55)
+    parser.add_argument("--refresh-seconds", type=int, default=60)
+    parser.add_argument("--save-dir", default="received_faces_local")
+    parser.add_argument("--save-cooldown", type=float, default=5.0)
+    parser.add_argument("--host", default="0.0.0.0")
+    parser.add_argument("--port", type=int, default=8080)
+    parser.add_argument("--fps", type=float, default=5.0)
+    parser.add_argument("--jpeg-quality", type=int, default=70)
+    parser.add_argument("--recent-distance", type=float, default=0.20)
+    parser.add_argument("--recent-seconds", type=float, default=90.0)
+    parser.add_argument("--process-every-n", type=int, default=3)
+    parser.add_argument("--detect-scale", type=float, default=0.25)
+    parser.add_argument("--gemini-api-key", default="")
+    parser.add_argument("--image-base-url", default="")
+    args = parser.parse_args()
+
+    app.config["IMAGE_DIR"] = str(Path(args.save_dir).resolve())
+    app.config["PROJECT_URL"] = args.project_url
+    app.config["API_KEY"] = args.api_key
+    if not args.image_base_url:
+        args.image_base_url = f"http://{discover_local_ipv4()}:{args.port}"
+
+    worker = threading.Thread(target=webcam_loop, args=(args,), daemon=True)
+    worker.start()
+
+    print(f"[INFO] Live view: http://127.0.0.1:{args.port}/")
+    print(f"[INFO] Stream: http://127.0.0.1:{args.port}/stream.mjpg")
+    print(f"[INFO] Health: http://127.0.0.1:{args.port}/healthz")
+    app.run(host=args.host, port=args.port, debug=False, threaded=True)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

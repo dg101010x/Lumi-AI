@@ -1,22 +1,39 @@
 # macOS
 .DS_Store
 
-# Xcode
+# Xcode / Swift
 **/xcuserdata/
 **/*.xcuserstate
 **/DerivedData/
 **/.swiftpm/
 **/build/
 
-# Node
+# Node / Next
 node_modules/
 .next/
 out/
 
-# Claude Code local state
+# Python virtualenvs and caches
+.venv/
+.venv311/
+__pycache__/
+*.pyc
+
+# Python runtime artifacts
+runlogs/
+run_logs/
+received_faces/
+received_faces_local/
+*.log
+
+# Local secrets and env
+.env
+.env.*
+secrets.*
+guardiancare/.env
+
+# Local app state
 .claude/
 
-# Python Core Tracking Backend
-guardiancare/.env
-guardiancare/__pycache__/
+# GuardianCare generated images
 guardiancare/*.jpg

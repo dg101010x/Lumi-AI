@@ -1,0 +1,15 @@
+[Unit]
+Description=AegisAI Limelight web preview
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/pranav/Documents/AeigisAI/AegisAI
+EnvironmentFile=-%h/.config/aegis-preview.env
+ExecStart=/bin/bash -lc 'source .venv/bin/activate && exec python pi/limelight_web_preview.py'
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target
