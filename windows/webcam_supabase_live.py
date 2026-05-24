@@ -196,15 +196,15 @@ def try_create_unknown_face(
     cache: SupabaseKnownFacesCache,
     *,
     encoding: list[float],
-    photo_url: str,
+    image_base64: str,
     image_name: str,
     description: str | None,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     stamp = utc_stamp()
     try:
-        image_row = cache.insert_image_record(
+        image_row = cache.insert_image_base64(
             image_name=image_name,
-            image_url=photo_url,
+            image_base64=image_base64,
         )
         label = "auto-created"
         if description:
@@ -213,7 +213,7 @@ def try_create_unknown_face(
             embedding=encoding,
             person_name="unidentified",
             label=label,
-            photo_url=image_row.get("image_url", photo_url),
+            photo_url=image_row.get("image_url", image_base64),
             last_seen_at=datetime.now(timezone.utc).isoformat(),
         )
         row["image_id"] = image_row.get("id")
@@ -392,53 +392,74 @@ def webcam_loop(args: argparse.Namespace) -> None:
 
             if detections and (time.time() - last_save_ts) >= args.save_cooldown:
                 image_path, json_path = save_detection_with_paths(output_dir, annotated, payload)
-                image_url = f"{args.image_base_url.rstrip('/')}/images/{image_path.name}"
                 for detection in detections:
-                    if detection.get("status") != "unknown":
-                        continue
+                    status = detection.get("status")
                     detection_embedding = detection.get("embedding")
                     if not isinstance(detection_embedding, list) or not detection_embedding:
                         continue
-                    created_row, create_error = try_create_unknown_face(
-                        cache,
-                        encoding=detection_embedding,
-                        photo_url=image_url,
-                        image_name=image_path.stem,
-                        description=None,
-                    )
-                    if created_row is not None:
-                        box = detection["box"]
-                        face_crop = frame[
-                            max(0, int(box["top"])):max(0, int(box["bottom"])),
-                            max(0, int(box["left"])):max(0, int(box["right"])),
-                        ]
-                        description = None
-                        if face_crop.size > 0 and args.gemini_api_key:
-                            try:
-                                description = describe_face_with_gemini(face_crop, args.gemini_api_key)
-                            except requests.RequestException as exc:
-                                detection["gemini_error"] = str(exc)
-                        if description:
-                            speak_windows_message(
-                                f"After this message, say the name of the person who is {description}"
-                            )
-                        mark_recent_face(
-                            detection_embedding,
-                            created_row.get("display_name") or created_row.get("person_name") or "created",
-                            datetime.now(timezone.utc).timestamp(),
+
+                    # Prepare face crop base64 (clean, no prefix)
+                    box = detection["box"]
+                    face_crop = frame[
+                        max(0, int(box["top"])):max(0, int(box["bottom"])),
+                        max(0, int(box["left"])):max(0, int(box["right"])),
+                    ]
+                    if face_crop.size == 0:
+                        continue
+                    
+                    crop_bytes = jpg_bytes_for_frame(face_crop, quality=85)
+                    if not crop_bytes:
+                        continue
+                    face_base64 = base64.b64encode(crop_bytes).decode("ascii")
+
+                    if status == "unknown":
+                        created_row, create_error = try_create_unknown_face(
+                            cache,
+                            encoding=detection_embedding,
+                            image_base64=face_base64,
+                            image_name=image_path.stem,
+                            description=None,
                         )
-                        detection["status"] = "created"
-                        detection["match"] = {
-                            "id": created_row.get("id"),
-                            "display_name": created_row.get("display_name"),
-                            "person_name": created_row.get("person_name"),
-                            "label": created_row.get("label"),
-                            "photo_url": created_row.get("photo_url"),
-                            "image_id": created_row.get("image_id"),
-                            "description": description,
-                        }
-                    elif create_error is not None:
-                        detection["match"] = {"create_error": create_error}
+                        if created_row is not None:
+                            description = None
+                            if args.gemini_api_key:
+                                try:
+                                    description = describe_face_with_gemini(face_crop, args.gemini_api_key)
+                                except requests.RequestException as exc:
+                                    detection["gemini_error"] = str(exc)
+                            if description:
+                                speak_windows_message(
+                                    f"After this message, say the name of the person who is {description}"
+                                )
+                            mark_recent_face(
+                                detection_embedding,
+                                created_row.get("display_name") or created_row.get("person_name") or "created",
+                                datetime.now(timezone.utc).timestamp(),
+                            )
+                            detection["status"] = "created"
+                            detection["match"] = {
+                                "id": created_row.get("id"),
+                                "display_name": created_row.get("display_name"),
+                                "person_name": created_row.get("person_name"),
+                                "label": created_row.get("label"),
+                                "photo_url": created_row.get("photo_url"),
+                                "image_id": created_row.get("image_id"),
+                                "description": description,
+                            }
+                        elif create_error is not None:
+                            detection["match"] = {"create_error": create_error}
+                    elif status == "matched":
+                        # Replace the old image in public.images with the new face_base64
+                        match_info = detection.get("match")
+                        if match_info and match_info.get("photo_url"):
+                            old_url = match_info["photo_url"]
+                            img_rec = cache.find_image_by_url(image_url=old_url)
+                            if img_rec:
+                                try:
+                                    cache.update_image_by_id(image_id=img_rec["id"], image_base64=face_base64)
+                                except Exception as exc:
+                                    detection["update_error"] = str(exc)
+
                     detection.pop("embedding", None)
 
                 for detection in detections:
