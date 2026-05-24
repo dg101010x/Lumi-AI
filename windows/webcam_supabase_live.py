@@ -470,19 +470,28 @@ def webcam_loop(args: argparse.Namespace) -> None:
                         elif create_error is not None:
                             detection["match"] = {"create_error": create_error}
                     elif status == "matched":
-                        # Replace the old image in public.images with the new face_base64
                         match_info = detection.get("match")
                         display_name = match_info.get("display_name") or "matched"
-                        add_server_event(f"Person detected: {display_name}", "detection")
-                        if match_info and match_info.get("photo_url"):
-                            old_url = match_info["photo_url"]
-                            img_rec = cache.find_image_by_url(image_url=old_url)
+                        add_server_event(f"Match found: {display_name}", "detection")
+                        
+                        try:
+                            add_server_event(f"Sending updated face for {display_name} to Supabase...", "upload")
+                            img_rec = None
+                            if match_info.get("photo_url"):
+                                img_rec = cache.find_image_by_url(image_url=match_info["photo_url"])
+                            
                             if img_rec:
-                                try:
-                                    add_server_event(f"Updating Supabase image for {display_name}...", "upload")
-                                    cache.update_image_by_id(image_id=img_rec["id"], image_base64=face_base64)
-                                except Exception as exc:
-                                    detection["update_error"] = str(exc)
+                                cache.update_image_by_id(image_id=img_rec["id"], image_base64=face_base64)
+                            else:
+                                # Create new image record if missing or URL was local
+                                new_img = cache.insert_image_base64(image_name=f"update-{display_name}-{utc_stamp()}", image_base64=face_base64)
+                                cache.update_known_face_photo(face_id=match_info["id"], photo_url=new_img["image_url"])
+                            
+                            add_server_event(f"Supabase update complete for {display_name}", "upload")
+                        except Exception as exc:
+                            print(f"[ERROR] Failed to update matched face: {exc}")
+                            detection["update_error"] = str(exc)
+                            add_server_event(f"Failed to update {display_name}: {str(exc)[:50]}", "system")
 
                     detection.pop("embedding", None)
 
