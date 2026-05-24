@@ -133,6 +133,21 @@ Very early, the repo stopped being a single clean line of work. We had:
 
 That made git history messy, but it was an honest reflection of how the team was building.
 
+Looking at the full branch graph, the split was not just cosmetic. We had:
+
+- `raw-limelight-feed` carrying the Pi preview/tunnel work
+- `windows-face-supabase-match` carrying the recognition/demo-survival path
+- `pi-limelight-orchestrator` carrying the later Windows/Supabase hardening
+- `openpose-pose-integration` representing a real exploration path that never
+  became the primary production route
+
+That means one of the real problems was merge debt itself:
+
+- features were proven in parallel instead of in one clean line
+- some branches were experiments, some were fallbacks, and some were the path
+  that actually became demoable
+- merging all of it later without losing context became part of the project
+
 ### 2. Local video was easy enough. Public video was not.
 
 We could get the Limelight preview working locally much earlier than we could make it demo-shareable.
@@ -175,6 +190,15 @@ The original vision put the Pi in the center, but the Pi path was expensive in h
 - ARM installs were slower
 - `face_recognition` / `dlib` was much heavier there
 - hardware/network debugging was slower than local Windows debugging
+- public stream routing from the Pi added another layer of fragility
+
+The full branch history shows that the Pi path never really died, but it did
+stop being the only center of the project. It turned into:
+
+- one branch for raw stream access
+- one branch for preview/public-hosting attempts
+- then a handoff/orchestrator branch once the Windows face pipeline became the
+  more reliable demo route
 
 That is why Windows stopped being just a backup and became a first-class demo path.
 
@@ -229,7 +253,37 @@ That tells the story clearly:
 - we were still escalating the fall/perception path late into the event
 - we did not want that last work to disappear just because it arrived near the end
 
+The branch graph reinforces this too. There was no single final fall-detection
+implementation during the event. Instead, there were multiple overlapping
+attempts:
+
+- the original Lumi AI camera + reminder idea
+- the FamiliarAI-style face path
+- the OpenPose exploration path
+- the earlier GuardianCare prototype
+- the late `guardiancare.zip` handoff
+
+That overlap was messy, but it was also a realistic hackathon pattern: the team
+kept chasing the most demoable perception path instead of pretending the first
+technical choice had to be permanent.
+
 ## Our product steps and each step what we did to get there
+
+Across all branches, the overall timeline was not “build one product from top
+to bottom.” It was closer to this:
+
+1. define the caregiver product and pitch
+2. prove raw hardware/video access
+3. try to make the feed shareable
+4. realize public reachability and Pi-side reliability were harder than
+   expected
+5. build a Windows fallback that could do more on one machine
+6. harden Supabase sync, identity, and preview loops through repeated fixes
+7. keep exploring stronger fall/perception options while pitch work happened in
+   parallel
+8. preserve both the earlier and the late-stage fall-detection work at the end
+
+That is the real timeline hidden inside the branch history.
 
 ### Step 1: We defined the product story first
 
@@ -294,6 +348,8 @@ What we learned here:
 - local success is not demo success
 - temporary preview links are fragile
 - Cloud Run can host a service, but it cannot magically see a local camera that the internet cannot reach
+- the branch work around preview/tunneling was not wasted, but it also showed
+  that “shareable video” was becoming its own mini-project inside the hackathon
 
 ### Step 4: We built a software-only fallback because the Pi path was too risky to be our only bet
 
@@ -316,6 +372,14 @@ That work landed through:
 - `2337100` improve face matching and preview with browser-side camera and embedding normalization
 
 This was not the cleanest architecture. It was the best hackathon architecture once time became the main constraint.
+
+Looking across the branches, this is the moment the repo really changed shape.
+After this pivot:
+
+- the Pi path became one valuable subsystem instead of the entire product
+- the Windows branch became the fastest place to debug recognition and state
+- branch history started reflecting “what can survive a live demo” more than
+  “what matches the original architecture”
 
 ### Step 5: We made the identity path real instead of fake
 
@@ -345,6 +409,15 @@ By the end of this step, the project had a working path for:
 - matching against `known_faces`
 - creating new rows when needed
 - serving a local preview for demo use
+
+This is also where the branch diffs show the most churn. The project was no
+longer trying to prove one big idea. It was solving a sequence of narrow
+integration problems:
+
+- can embeddings load consistently from Supabase
+- can images be transported without depending on fragile file URIs
+- can matched faces update instead of only unknowns inserting
+- can the dashboard reflect backend truth instead of stale local state
 
 ### Step 6: We fed in real product data late in the day
 
