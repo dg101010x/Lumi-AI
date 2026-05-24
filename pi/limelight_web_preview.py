@@ -2,6 +2,8 @@ import argparse
 import json
 import os
 import sys
+import threading
+import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -82,6 +84,7 @@ HTML_PAGE = """<!doctype html>
 
 class PreviewServer(BaseHTTPRequestHandler):
     source_url = ""
+    webcam_stream = None
 
     def do_HEAD(self) -> None:
         if self.path in ("/", "/index.html"):
@@ -93,7 +96,7 @@ class PreviewServer(BaseHTTPRequestHandler):
             return
 
         if self.path == "/healthz":
-            body = json.dumps({"ok": True, "source_url": self.source_url}).encode("utf-8")
+            body = json.dumps(self._health_payload()).encode("utf-8")
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
@@ -123,7 +126,7 @@ class PreviewServer(BaseHTTPRequestHandler):
             return
 
         if self.path == "/healthz":
-            self._send_json({"ok": True, "source_url": self.source_url})
+            self._send_json(self._health_payload())
             return
 
         if self.path == "/stream.mjpg":
@@ -141,7 +144,22 @@ class PreviewServer(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _health_payload(self) -> dict:
+        payload = {"ok": True}
+        if self.webcam_stream is not None:
+            payload["source_type"] = "webcam"
+            payload["webcam_device"] = self.webcam_stream.device
+            return payload
+
+        payload["source_type"] = "url"
+        payload["source_url"] = self.source_url
+        return payload
+
     def _proxy_stream(self) -> None:
+        if self.webcam_stream is not None:
+            self._serve_webcam_stream()
+            return
+
         try:
             upstream = requests.get(self.source_url, stream=True, timeout=(2, 10))
             upstream.raise_for_status()
@@ -173,6 +191,99 @@ class PreviewServer(BaseHTTPRequestHandler):
         finally:
             upstream.close()
 
+    def _serve_webcam_stream(self) -> None:
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        try:
+            while True:
+                frame_bytes = self.webcam_stream.next_frame(timeout=5.0)
+                if frame_bytes is None:
+                    self.send_error(HTTPStatus.BAD_GATEWAY, "Webcam frame timeout")
+                    return
+
+                self.wfile.write(b"--frame\r\n")
+                self.wfile.write(b"Content-Type: image/jpeg\r\n")
+                self.wfile.write(f"Content-Length: {len(frame_bytes)}\r\n\r\n".encode("ascii"))
+                self.wfile.write(frame_bytes)
+                self.wfile.write(b"\r\n")
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+
+class WebcamStream:
+    def __init__(
+        self,
+        device: str | int,
+        width: int,
+        height: int,
+        fps: int,
+        jpeg_quality: int,
+    ) -> None:
+        import cv2
+
+        self.cv2 = cv2
+        self.device = device
+        self.width = width
+        self.height = height
+        self.fps = fps
+        self.jpeg_quality = jpeg_quality
+        self._frame_lock = threading.Lock()
+        self._latest_frame: bytes | None = None
+        self._stopped = threading.Event()
+
+        capture_target = int(device) if isinstance(device, str) and device.isdigit() else device
+        cap = cv2.VideoCapture(capture_target)
+        if not cap.isOpened():
+            raise RuntimeError(f"Could not open webcam device {device}")
+
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        cap.set(cv2.CAP_PROP_FPS, fps)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        self.cap = cap
+
+        self._thread = threading.Thread(target=self._capture_loop, daemon=True)
+        self._thread.start()
+
+    def _capture_loop(self) -> None:
+        sleep_for = 1.0 / max(1, self.fps)
+        encode_params = [self.cv2.IMWRITE_JPEG_QUALITY, self.jpeg_quality]
+
+        while not self._stopped.is_set():
+            ok, frame = self.cap.read()
+            if not ok:
+                time.sleep(0.05)
+                continue
+
+            ok, encoded = self.cv2.imencode(".jpg", frame, encode_params)
+            if not ok:
+                continue
+
+            with self._frame_lock:
+                self._latest_frame = encoded.tobytes()
+
+            time.sleep(sleep_for)
+
+    def next_frame(self, timeout: float) -> bytes | None:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            with self._frame_lock:
+                if self._latest_frame is not None:
+                    return self._latest_frame
+            time.sleep(0.01)
+        return None
+
+    def close(self) -> None:
+        self._stopped.set()
+        self._thread.join(timeout=1.0)
+        self.cap.release()
+
 
 def resolve_source_url(args: argparse.Namespace) -> str | None:
     source_url = args.source_url or os.getenv("LIMELIGHT_SOURCE_URL")
@@ -203,19 +314,39 @@ def main() -> int:
     )
     parser.add_argument("--source-url", help="Full upstream Limelight stream URL")
     parser.add_argument("--source-host", help="Limelight host or IP to probe")
+    parser.add_argument(
+        "--webcam-device",
+        default=os.getenv("WEBCAM_DEVICE", "-1"),
+        help="Use a local webcam device index or /dev/video path instead of proxying a URL",
+    )
     args = parser.parse_args()
 
-    source_url = resolve_source_url(args)
-    if not source_url:
-        print("Could not find a Limelight stream. Pass --source-url or --source-host.")
-        return 1
+    webcam_stream = None
+    if args.webcam_device != "-1":
+        webcam_stream = WebcamStream(
+            device=args.webcam_device,
+            width=int(os.getenv("WEBCAM_WIDTH", "640")),
+            height=int(os.getenv("WEBCAM_HEIGHT", "480")),
+            fps=int(os.getenv("WEBCAM_FPS", "15")),
+            jpeg_quality=int(os.getenv("WEBCAM_JPEG_QUALITY", "70")),
+        )
+        PreviewServer.webcam_stream = webcam_stream
+        print(f"Using webcam device: {args.webcam_device}")
+    else:
+        source_url = resolve_source_url(args)
+        if not source_url:
+            print("Could not find a Limelight stream. Pass --url/--host or set WEBCAM_DEVICE.")
+            return 1
+        PreviewServer.source_url = source_url
 
-    PreviewServer.source_url = source_url
     server = ThreadingHTTPServer((args.bind, args.port), PreviewServer)
 
     print(f"Preview page: http://127.0.0.1:{args.port}/")
     print(f"Preview stream: http://127.0.0.1:{args.port}/stream.mjpg")
-    print(f"Upstream source: {source_url}")
+    if webcam_stream is not None:
+        print("Upstream source: webcam")
+    else:
+        print(f"Upstream source: {PreviewServer.source_url}")
 
     try:
         server.serve_forever()
@@ -223,6 +354,8 @@ def main() -> int:
         pass
     finally:
         server.server_close()
+        if webcam_stream is not None:
+            webcam_stream.close()
 
     return 0
 
