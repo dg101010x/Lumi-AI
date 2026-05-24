@@ -1,6 +1,6 @@
-# AegisAI / Lumi AI
+# Lumi AI
 
-AegisAI is the hackathon build log, codebase, and demo stack for an elder-care assistant we built during **Synthesis Hacks**, a free in-person 12-hour high school hackathon held on **May 23, 2026** at **Google Humboldt in Sunnyvale, California**. Teams had to build and submit between check-in and the 5 PM deadline, then demo in person to judges that evening.
+Lumi AI is the build log, codebase, and demo stack for our project at **Synthesis Hacks**, a free in-person 12-hour high school hackathon held on **May 23, 2026** at **Google Humboldt in Sunnyvale, California**. Teams had to build during the event, submit by 5 PM, and then present live to judges.
 
 Hackathon page:
 
@@ -16,9 +16,69 @@ This repository is not a polished single-product repo. It is the merged result o
 
 That is why `main` now looks like a monorepo. It is one branch containing the real evolution of the project.
 
-## The idea
+## What tools we could use
 
-The product pitch was simple:
+The event rules were permissive. We could use:
+
+- any language
+- any framework
+- any library
+- any API
+- AI tools, as long as anything not written by us was cited in the submission
+
+That mattered because Lumi AI ended up using a very mixed stack:
+
+- Python
+- SwiftUI
+- Next.js
+- Supabase
+- Google Cloud / Cloud Run ideas from the workshop
+- Gemini
+- Raspberry Pi hardware
+- Limelight camera tooling
+- Windows webcam tooling
+
+## Our constraints and guidelines
+
+These were the real constraints that shaped the build:
+
+- everything had to be built during the event window
+- the final system had to be demoable live, not just theoretically correct
+- local hardware had to work under time pressure
+- network accessibility mattered as much as code quality
+- anything cloud-based had to be simple enough to wire up fast
+- if one path got too fragile, we had to pivot without losing progress
+
+Practical team constraints that emerged during the sprint:
+
+- Pi-side installs were slower and more fragile than Windows
+- camera URLs were often local-only
+- Supabase auth and schema details were not frictionless
+- we had to optimize for “what can be shown to judges in a few minutes”
+
+## Themes and tracks
+
+Synthesis Hacks was effectively **open-ended**. It was not a hackathon with one strict required theme or narrow track list for what you were allowed to build.
+
+What the event page did emphasize were the prize and judging lenses:
+
+- Grand Prize
+- Best Technical Implementation
+- Most Creative Concept
+- Best First Hackathon
+- Best UI/UX Design
+- Audience Favorite
+
+So instead of building to a narrow official track, we built to a practical intersection of:
+
+- AI
+- caregiving / health-adjacent support
+- hardware perception
+- live demo impact
+
+## Our core idea
+
+The product pitch was:
 
 > an always-on room assistant for elder care that watches, listens, logs, and escalates when something is wrong
 
@@ -35,7 +95,30 @@ The intended hardware/software story was:
 - **AI layer**: Gemini / Vertex AI style assistant behavior
 - **state and sync**: Supabase
 
-## Why the architecture looks like this
+## Our brainstorming
+
+The idea did not start as “just build face recognition.”
+
+The broader brainstorm was around elder care anxiety:
+
+- family members do not know if an older relative is okay
+- staff and caregivers are stretched thin
+- wearables and panic buttons depend on compliance
+- the most valuable thing is often simple awareness: did someone fall, ask for help, or stop responding
+
+From there, the team converged on a system with three layers:
+
+1. perception in the room
+2. an AI layer that could interpret events or prompts
+3. a caregiver-facing interface that could show status and alerts
+
+That is why the repo spans:
+
+- room sensors and camera feeds
+- AI prompts and event logic
+- caregiver dashboard and app scaffolds
+
+## Why the architecture ended up looking like this
 
 We did not build this in one straight line. We built it the way hackathon teams actually build:
 
@@ -46,12 +129,9 @@ We did not build this in one straight line. We built it the way hackathon teams 
 
 That is exactly what happened here.
 
-## The hackathon context that shaped the build
+## Hackathon context that shaped the technical choices
 
-Two workshop artifacts influenced the technical direction:
-
-- `AI Workshop Synthesis Hacks.pdf`
-- `GCP commands.pdf`
+We had access to Google Cloud workshop material and a GCP command/reference sheet during the event, and that influenced the technical direction.
 
 The workshop emphasized a practical Google Cloud split:
 
@@ -75,9 +155,63 @@ That cloud-first guidance shows up in the repo in:
 - Cloud Run notes in the scripts and preview server
 - early attempts to make the camera stream public through GCP instead of only local LAN tooling
 
-## The real build story
+## Problems we ran into +
 
-### Phase 1: the repo started as app scaffolding
+These were the main issues that forced architecture and scope changes:
+
+### 1. The repo split into multiple valid directions
+
+We ended up with:
+
+- caregiver app scaffold work
+- Pi / Limelight work
+- Windows face-recognition work
+- older GuardianCare prototype code
+
+That was not clean from a git-history perspective, but it was honest to how the team was actually moving.
+
+### 2. Local camera access was easier than public camera access
+
+We could get local MJPEG previews much earlier than we could get a clean public demo endpoint. Making the feed reachable outside the room was a much bigger problem than simply displaying the feed.
+
+### 3. Cloud Run was not the hard part; reachability was
+
+The preview service could be containerized, but Cloud Run could not directly read LAN-only camera sources such as:
+
+- `limelight.local`
+- `172.29.x.x`
+
+So the blocker was not “can we deploy code to Cloud Run?” It was “can Cloud Run actually see the upstream feed?”
+
+### 4. Supabase auth and schema details took real time
+
+At different times:
+
+- reads worked
+- writes failed under RLS
+- publishable keys were not enough for inserts
+- service-role keys were needed for reliable creation/update flows
+
+That pushed a lot of later work into debugging:
+
+- `known_faces`
+- `images`
+- base64 image handling
+- insert/update verification scripts
+
+### 5. Pi-side face stack cost more time than Windows-side face stack
+
+`face_recognition` on Windows was far easier to make demoable quickly than the same stack on Raspberry Pi. That forced the Windows fallback to become a first-class path instead of just a backup.
+
+### 6. Camera selection was fragile even on the “easy” path
+
+The Windows live stack broke multiple times simply because the configured camera index was wrong or disappeared. Health checks and launcher scripts mattered because a running server was not the same as a working camera.
+
+## Our product steps and each step what we did to get there
+
+### Step 1: caregiver product shell
+
+We first established the product-facing side:
 
 The earliest `main` history was app-facing:
 
@@ -85,20 +219,20 @@ The earliest `main` history was app-facing:
 - `c3d7038` Add SwiftUI iOS app and bootstrap Next.js onboarding web app
 - `ffa3713` and `f06b742` README revisions around the Lumi AI caregiver app story
 
-This was the polished caregiver-facing layer:
+What we did:
 
 - SwiftUI app in [`ios/`](./ios)
 - Next.js onboarding web scaffold in [`web/`](./web)
 
-At that point, the repo mostly told the product story, not the sensor story.
+This gave us the caregiver story and UI surface, even before the room-perception layer was reliable.
 
-### Phase 2: the Pi / Limelight path became the priority
+### Step 2: prove room-camera access on Pi
 
 Once the camera/hardware side took over, the first requirement was not “AI”. It was just:
 
 > can the Pi actually see the Limelight feed reliably?
 
-That led to:
+What we did:
 
 - `3a3f618` Add Raspberry Pi Limelight viewer scaffold
 - `a220cf9` Add public Limelight web preview bridge
@@ -106,7 +240,7 @@ That led to:
 - `c9e0f2f` Add managed services for Limelight preview tunnel
 - `7aeebc1` Add webcam face sender and ngrok service
 
-The Pi work became:
+This step focused on:
 
 - probe the Limelight
 - auto-discover the IP when possible
@@ -115,14 +249,25 @@ The Pi work became:
 - keep it alive with user services
 - make it shareable without changing routers
 
-That produced:
+Artifacts:
 
 - [`pi/limelight_probe.py`](./pi/limelight_probe.py)
 - [`pi/limelight_video_viewer.py`](./pi/limelight_video_viewer.py)
 - [`pi/limelight_web_preview.py`](./pi/limelight_web_preview.py)
 - [`deploy/systemd/`](./deploy/systemd)
 
-### Phase 3: reality forced a fallback away from “Pi does everything”
+### Step 3: attempt to make the feed demo-shareable
+
+What we did:
+
+- built local web preview endpoints
+- added localtunnel and ngrok service paths
+- added Cloud Run preparation files
+- tested “public demo” approaches instead of assuming LAN-only was enough
+
+This is where the gap between “working locally” and “usable in front of judges” became obvious.
+
+### Step 4: create a fallback that avoids the Pi bottleneck
 
 The original idea was to keep the Pi central. In practice, several things made that risky for a live hackathon demo:
 
@@ -136,9 +281,16 @@ So the architecture pivoted:
 
 > keep the Pi path alive, but build a Windows-only path that can do local webcam capture, face matching, Supabase sync, and browser preview on one machine
 
-That was the single most important engineering decision in this sprint. It traded elegance for demo survivability.
+What we did:
 
-### Phase 4: the Windows face stack became the working demo path
+- built receiver paths on Windows
+- built local webcam recognition
+- built a browser live-view page
+- built one-command launcher behavior
+
+This was the biggest practical decision of the sprint. It traded elegance for demo survivability.
+
+### Step 5: wire the identity store and unknown-face flow
 
 The Windows branch history shows that pivot clearly:
 
@@ -157,7 +309,7 @@ The Windows branch history shows that pivot clearly:
 - `78f7a8a` add recognized faces gallery with base64 decoding
 - `9484893` fix face upload errors and wire dashboard entirely to Supabase
 
-That line of work created the most practical demo stack in this repo:
+What we did:
 
 - webcam plugged into Windows machine
 - live local browser view on `127.0.0.1:8080`
@@ -166,64 +318,42 @@ That line of work created the most practical demo stack in this repo:
 - unknown faces inserted into `known_faces` and `images`
 - local launcher command `lumiai`
 
-## The biggest problems we hit
+### Step 6: keep the earlier prototype work instead of discarding it
 
-These were the real blockers, not theoretical ones:
+The commit `39f6c42` brought in the older GuardianCare prototype and fall-detection work.
 
-### 1. Branches split faster than the product converged
+What we did:
 
-The repo history split into:
+- preserved the older fall-detection code
+- preserved earlier face-recognition experiments
+- preserved duplicate app scaffolds that reflected prior iterations
 
-- app scaffold work
-- Pi / Limelight work
-- Windows face-recognition work
+This made `main` messier, but it prevented useful hackathon work from getting stranded.
 
-They did not land on one clean branch naturally. That is why `main` later needed manual unrelated-history merging.
+### Step 7: preserve the late-stage fall-detection handoff
 
-### 2. Camera streaming was easy locally and awkward remotely
+Near the end of the hackathon, fall-detection work was also preserved as a zip artifact:
 
-The live feed worked locally much earlier than it worked publicly. The hard part was not rendering MJPEG. The hard part was making a local room camera reachable in a demo-safe way.
+- [`guardiancare.zip`](../guardiancare.zip)
 
-That produced several parallel approaches:
+What we did:
 
-- local preview page
-- localtunnel
-- ngrok
-- Cloud Run preparation
+- kept the late-stage fall-detection handoff instead of treating it as throwaway output
+- tied it back to the earlier `guardiancare/` prototype and the `Fall detection` commit
+- treated it as part of the real project history, because that work happened late in the sprint rather than in the clean early scaffold phase
 
-### 3. Cloud Run was code-ready before it was network-ready
+### Step 8: unpack the late GuardianCare fall-detection bundle into the repo
 
-The preview server could be containerized, but Cloud Run could not directly read:
+We then unpacked the zip into a normal tracked folder:
 
-- `limelight.local`
-- `172.29.x.x`
-- other LAN-only camera addresses
+- [`guardiancare_late/`](./guardiancare_late)
 
-So the cloud path was structurally blocked until the source became publicly reachable or reverse-proxied.
+What we verified:
 
-### 4. Supabase auth was one of the nastiest practical blockers
-
-At different points:
-
-- reads worked
-- writes failed because of RLS
-- publishable keys were insufficient
-- service-role keys were needed for reliable inserts
-
-That forced a lot of the later scripts and fixes:
-
-- explicit insert tests
-- base64 image paths
-- `known_faces` vs `images` schema alignment
-- exact update flows for unidentified faces
-
-### 5. `face_recognition` on Pi was a real-time tax
-
-The code path was valid, but the build/install/runtime cost on the Pi was much worse than on Windows. That is one reason the Windows-only fallback became the demo-safe route.
-
-### 6. Camera devices were inconsistent even on Windows
-
-The live stack broke multiple times simply because the selected camera index was wrong or disappeared. The launcher and health checks mattered because `127.0.0.1:8080` being up did not mean the camera was actually healthy.
+- it is actually late-stage fall-detection work
+- it contains `fall_detection.py`, `main.py`, `face_recognition_module.py`, `supabase_client.py`, and `config.py`
+- it also contains same-day registered face images from the sprint
+- the original `.env` from the zip was converted to `.env.example` before adding it to the repo
 
 ## What the repo contains now
 
@@ -255,18 +385,21 @@ The live stack broke multiple times simply because the selected camera index was
 ## Legacy prototype retained for reference
 
 - [`guardiancare/`](./guardiancare)
+- [`guardiancare_late/`](./guardiancare_late)
 
-This older directory is not dead weight. It preserves:
+These older directories are not dead weight. They preserve:
 
 - earlier fall-detection logic
 - earlier face-recognition logic
 - duplicated app scaffolds from the prototype phase
+- the unpacked late-stage GuardianCare fall-detection handoff
 
 ## Directory map
 
 ```text
 .
 ├── guardiancare/          Earlier prototype and experiments
+├── guardiancare_late/     Unpacked late-stage fall-detection bundle
 ├── ios/                   Current SwiftUI app scaffold
 ├── web/                   Current Next.js scaffold
 ├── pi/                    Raspberry Pi + Limelight tools

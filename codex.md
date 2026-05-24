@@ -1,4 +1,15 @@
-# AegisAI Repo Notes
+# Lumi AI Repo Notes
+
+## Naming
+- Product name: `Lumi AI`
+- `AegisAI` may still appear as the local repo/folder name from earlier work, but the project/pitch name is `Lumi AI`.
+
+## Late-stage fall detection artifact
+- User added a zip at `C:\Users\emmad\Downloads\Hackathon-synthesis\guardiancare.zip`.
+- This zip is the fall-detection file/work that was done near the end of the hackathon.
+- Keep it represented in the project history alongside the `guardiancare/` prototype and late `Fall detection` commit.
+- Unpacked into tracked repo folder `guardiancare_late/` after verification.
+- The unpacked bundle contains `fall_detection.py`, `main.py`, `face_recognition_module.py`, `config.py`, `supabase_client.py`, registration images, and a placeholder `.env` converted to `.env.example`.
 
 ## Active branch
 - `windows-face-supabase-match`
