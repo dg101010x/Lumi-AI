@@ -409,10 +409,7 @@ def webcam_loop(args: argparse.Namespace) -> None:
                 image_path, json_path = save_detection_with_paths(output_dir, annotated, payload)
                 for detection in detections:
                     status = detection.get("status")
-                    detection_embedding = detection.get("embedding")
-                    if not isinstance(detection_embedding, list) or not detection_embedding:
-                        continue
-
+                    
                     # Prepare face crop base64 (clean, no prefix)
                     box = detection["box"]
                     face_crop = frame[
@@ -428,6 +425,10 @@ def webcam_loop(args: argparse.Namespace) -> None:
                     face_base64 = base64.b64encode(crop_bytes).decode("ascii")
 
                     if status == "unknown":
+                        detection_embedding = detection.get("embedding")
+                        if not isinstance(detection_embedding, list) or not detection_embedding:
+                             continue
+                        
                         add_server_event("Encoding unknown face crop to Base64...", "upload")
                         created_row, create_error = try_create_unknown_face(
                             cache,
@@ -658,7 +659,7 @@ def main() -> int:
     parser.add_argument("--threshold", type=float, default=0.55)
     parser.add_argument("--refresh-seconds", type=int, default=60)
     parser.add_argument("--save-dir", default="received_faces_local")
-    parser.add_argument("--save-cooldown", type=float, default=10.0)
+    parser.add_argument("--save-cooldown", type=float, default=5.0)
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--fps", type=float, default=5.0)
