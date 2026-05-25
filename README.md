@@ -7,6 +7,32 @@ and demo live. This repo is not a cleaned-up product repo. It is the merged
 record of what we actually built, what broke, what we pivoted away from, and
 what we preserved near the end so none of the work got lost.
 
+At the highest level, Lumi AI was our attempt to build a room-based care
+assistant for elderly residents. The idea was that a camera and AI system in
+the room could notice when something important happened, like a fall or an
+unfamiliar person showing up, and could also help with day-to-day care tasks
+like reminders, room awareness, and caregiver updates. We wanted it to feel
+like something between a safety monitor and a lightweight care companion, not
+just a single-purpose computer vision demo.
+
+What made the project hard is that it was really several systems at once. One
+part of it was perception: getting video from the Raspberry Pi, Limelight, or a
+Windows webcam and turning that into something useful. Another part was
+identity: figuring out whether a face matched someone we already knew or if it
+should become a new record. Another part was product experience: making the
+system visible in a browser, giving it app/dashboard surfaces, and shaping it
+into something we could explain in a pitch. Because we were building all of
+that in one hackathon day, the repo shows the real path we took: starting with
+hardware, building live preview links, creating a Windows fallback when the Pi
+path was too risky, wiring face and image data into Supabase, and pulling in
+late fall-detection work near the end.
+
+So this repo is best read as the engineering story of how Lumi AI came
+together. It includes the original hardware path, the fallback runtime that
+kept the demo alive, the database and recognition plumbing, the app shells, and
+the late artifacts that show where the project was still heading when the
+hackathon clock ran out.
+
 Hackathon page:
 
 - [Synthesis Hacks on Devpost](https://synthesishacks.devpost.com/?ref_feature=challenge&ref_medium=your-open-hackathons&ref_content=Recently+ended)
