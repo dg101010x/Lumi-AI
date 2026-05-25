@@ -37,6 +37,50 @@ Hackathon page:
 
 - [Synthesis Hacks on Devpost](https://synthesishacks.devpost.com/?ref_feature=challenge&ref_medium=your-open-hackathons&ref_content=Recently+ended)
 
+## Devpost visuals
+
+These are the images from our Devpost submission that show the main shape of
+the project. They are useful because they capture both sides of Lumi AI: the
+caregiver app experience and the hardware setup that we were trying to make
+work during the event.
+
+### Caregiver home screen
+
+This screen shows the main caregiver view: the resident status, a quick way to
+alert caregivers, today's medications, and fast contact actions.
+
+![Lumi AI caregiver home screen](assets/devpost/ios-home.png)
+
+### Activity and unknown-person flow
+
+This screen shows the activity feed, including unknown-person detection,
+recently seen people, and the flow where the system asks the user to identify a
+new face instead of silently guessing.
+
+![Lumi AI activity screen](assets/devpost/ios-activity.png)
+
+### Family and caregiver contacts
+
+This screen shows the caregiver contact list and the family-notification side
+of the app, which was a big part of the project story from the start.
+
+![Lumi AI family screen](assets/devpost/ios-family.png)
+
+### Resident settings and alert preferences
+
+This screen shows the resident profile, medical context, and the emergency SMS
+and push-notification settings that tied the app back to the care workflow.
+
+![Lumi AI settings screen](assets/devpost/ios-settings.png)
+
+### Limelight hardware photo
+
+This photo shows the Limelight hardware setup we were using as part of the
+original in-room sensing path before we had to rely more heavily on fallback
+software paths.
+
+![Lumi AI Limelight hardware](assets/devpost/limelight-hardware.jpeg)
+
 This repo includes:
 
 - the caregiver-facing app scaffolds
