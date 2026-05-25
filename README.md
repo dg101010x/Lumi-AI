@@ -339,228 +339,68 @@ technical choice had to be permanent.
 
 ## Our product steps and each step what we did to get there
 
-Across all branches, the overall timeline was not “build one product from top
-to bottom.” It was closer to this:
+The real build order across the branches was:
 
-1. define the caregiver product and pitch
-2. prove raw hardware/video access
-3. try to make the feed shareable
-4. realize public reachability and Pi-side reliability were harder than
-   expected
-5. build a Windows fallback that could do more on one machine
-6. harden Supabase sync, identity, and preview loops through repeated fixes
-7. keep exploring stronger fall/perception options while pitch work happened in
-   parallel
-8. preserve both the earlier and the late-stage fall-detection work at the end
+1. define the caregiver product
+2. prove Pi and Limelight video access
+3. make the feed visible in a browser and try to share it
+4. build a Windows fallback when the Pi path became too risky
+5. make recognition and Supabase sync actually work
+6. keep fall-detection work alive in parallel
+7. merge and preserve everything at the end
 
-That is the real timeline hidden inside the branch history.
+### Step 1: We defined the product
 
-### Step 1: We defined the product story first
+We started with the product story, not the final hardware stack. Lumi AI was
+meant to be a caregiver-facing elder-care assistant with room awareness, fall
+detection, reminders, and recognition. This step shows up in the early app
+shells and pitch framing.
 
-The product idea came before the stable hardware implementation.
+### Step 2: We proved the Pi camera path
 
-What we wanted:
+We got the Raspberry Pi and Limelight path working enough to probe the camera,
+open the stream, and preview it locally. This gave us a real hardware base
+instead of only an idea.
 
-- a caregiver-facing system
-- elder-care room awareness
-- falls + reminders + recognition
-- an AI layer that could help interpret and label events
+### Step 3: We tried to make the feed shareable
 
-Early repo commits that show that product shell:
+After local preview worked, we turned it into a browser preview and then tried
+to make it reachable for a live demo. That led to tunnel links, deployment
+prep, and the realization that public reachability was its own problem.
 
-- `f5c4e7d` Initial commit
-- `c3d7038` Add SwiftUI iOS app and bootstrap Next.js onboarding web app
-- `ffa3713` and `f06b742` README revisions around the Lumi AI story
+### Step 4: We built the Windows fallback
 
-What we built in this step:
+This was the biggest pivot. We made Windows capable of doing webcam capture,
+live preview, face detection, Supabase lookup, and unknown-face creation on one
+machine. After that, the Pi path became one subsystem and the Windows path
+became the fastest place to debug.
 
-- `ios/` SwiftUI caregiver app scaffold
-- `web/` onboarding / dashboard scaffold
+### Step 5: We made recognition and Supabase real
 
-This was the “what judges and caregivers should understand” layer.
+We moved from “there is a webcam page” to “the system can match a known face or
+create a new one.” This is where the project became stateful: face rows, image
+rows, backend updates, and gallery/dashboard state all had to work together.
 
-### Step 2: We proved raw room-camera access on the Pi
+### Step 6: We spent a lot of time hardening the live loop
 
-Before AI, we needed one basic proof:
+Late in the day, most of the work was repeated fixes instead of new features.
+We kept tightening lag, duplicate detections, duplicate uploads, image-path
+handling, matched-face updates, and logging until the fallback path felt
+believable enough for a demo.
 
-> can the Pi actually see and surface the Limelight feed
+### Step 7: We kept the fall-detection path alive
 
-What we built:
+Even while the face and backend loop was getting most of the debug effort, the
+fall-detection story stayed active through the morning product framing, the
+OpenPose exploration, the earlier GuardianCare code, and the late
+`guardiancare.zip` handoff.
 
-- `pi/limelight_probe.py`
-- `pi/limelight_video_viewer.py`
-- `pi/limelight_web_preview.py`
+### Step 8: We preserved the real build
 
-The related commits:
-
-- `3a3f618` Add Raspberry Pi Limelight viewer scaffold
-- `a220cf9` Add public Limelight web preview bridge
-- `63b6a42` Prepare Limelight preview for Cloud Run
-- `c9e0f2f` Add managed services for Limelight preview tunnel
-
-What that step accomplished:
-
-- raw stream access
-- local preview
-- early public-preview experiments
-- a practical Pi-side foundation instead of only a diagram
-
-### Step 3: We turned “preview” into a demo problem, not just a dev problem
-
-Once the video existed locally, the next issue was:
-
-> can anyone else actually see it during a demo
-
-That is when tunnel URLs started being shared and reused in Discord, and when deployment prep appeared in the repo.
-
-What we learned here:
-
-- local success is not demo success
-- temporary preview links are fragile
-- Cloud Run can host a service, but it cannot magically see a local camera that the internet cannot reach
-- the branch work around preview/tunneling was not wasted, but it also showed
-  that “shareable video” was becoming its own mini-project inside the hackathon
-
-### Step 4: We built a software-only fallback because the Pi path was too risky to be our only bet
-
-This was the most important technical pivot of the day.
-
-Instead of treating Windows as a side experiment, we made it capable of doing the whole recognition/demo loop on one machine:
-
-- webcam capture
-- live preview
-- face detection/embedding
-- Supabase lookup
-- unknown-face creation
-- local dashboard/browser preview
-
-That work landed through:
-
-- `04927dd` Add Windows face matching and LumiAI launcher
-- `8e963d5` live-view repair
-- `eb9bc05` Add live local face receiver view
-- `2337100` improve face matching and preview with browser-side camera and embedding normalization
-
-This was not the cleanest architecture. It was the best hackathon architecture once time became the main constraint.
-
-Looking across the branches, this is the moment the repo really changed shape.
-After this pivot:
-
-- the Pi path became one valuable subsystem instead of the entire product
-- the Windows branch became the fastest place to debug recognition and state
-- branch history started reflecting “what can survive a live demo” more than
-  “what matches the original architecture”
-
-### Step 5: We made the identity path real instead of fake
-
-This step moved us from “a webcam page exists” to “the system actually recognizes or creates people.”
-
-What we added:
-
-- `windows/face_receiver.py`
-- `windows/face_matching.py`
-- `windows/supabase_known_faces.py`
-- `windows/webcam_supabase_match.py`
-- `windows/webcam_supabase_live.py`
-- `windows/lumiai.ps1`
-
-And the commits show the hardening sequence clearly:
-
-- standardize unknown naming
-- test inserts directly against Supabase
-- switch image handling to base64
-- fix cases where uploads did not fire
-- fix cases where matched users did not update properly
-- move the dashboard/gallery to Supabase-backed state instead of mixed local state
-
-By the end of this step, the project had a working path for:
-
-- live local face view
-- matching against `known_faces`
-- creating new rows when needed
-- serving a local preview for demo use
-
-This is also where the branch diffs show the most churn. The project was no
-longer trying to prove one big idea. It was solving a sequence of narrow
-integration problems:
-
-- can embeddings load consistently from Supabase
-- can images be transported without depending on fragile file URIs
-- can matched faces update instead of only unknowns inserting
-- can the dashboard reflect backend truth instead of stale local state
-
-### Step 6: We fed in real product data late in the day
-
-The Discord export shows product details continuing to arrive deep into the sprint:
-
-- **4:21 PM**: medication schedule shared
-  - Amlodipine - 1 pill - 9AM
-  - Lisinopril - 1 pill - 9PM
-  - Metformin - 1 pill - 1PM
-  - Simvastatin - 1 pill - 9PM
-
-That matters because Lumi AI was never just “camera tech.” The goal stayed tied to the elder-care workflow all the way through the end.
-
-### Step 7: We tightened the pitch while still building
-
-The Discord export shows that by **4:26 PM** the team was already refining the
-50-word technical pitch language, and by **4:37 PM** there was a detailed
-technical summary tying together:
-
-- edge CV
-- Raspberry Pi
-- Windows webcam pipeline
-- `face_recognition`
-- Supabase `known_faces`
-- Flask MJPEG preview
-- unknown face insertion
-- Gemini-assisted naming prompts
-
-That same 4:37 PM technical note also correctly called out a real code limitation:
-
-> matched known faces were not yet updating their most recent image path the way unknown faces were
-
-That limitation later lines up with the fixes that landed in `d6dd6f3` and `9484893`.
-
-### Step 8: We preserved the older GuardianCare prototype instead of deleting it
-
-The commit:
-
-- `39f6c42` Fall detection
-
-brought in the earlier GuardianCare code. That commit matters because it preserved another branch of the same core idea:
-
-- fall detection
-- face recognition
-- iOS scaffold
-- web scaffold
-- Supabase-connected code
-
-It made `main` larger, but it kept a real product ancestor in the repo instead of losing it.
-
-### Step 9: We preserved the late fall-detection handoff too
-
-Near the end of the day, another artifact arrived:
-
-- **5:08 PM**: `guardiancare.zip`
-
-We unpacked and kept it as:
-
-- `guardiancare_late/`
-
-That bundle contains:
-
-- `fall_detection.py`
-- `main.py`
-- `face_recognition_module.py`
-- `config.py`
-- `supabase_client.py`
-- same-day registration images
-
-This bundle is real late-stage fall work, not just a leftover archive. The code
-uses a MediaPipe pose-based fall path with torso-angle and hip-drop logic,
-which makes it relevant to the original Lumi AI concept instead of being random
-extra files.
+At the end, the job was not just to keep building. It was to make sure the real
+history survived. That is why `main` now holds the Pi preview work, the Windows
+recognition path, the app scaffolds, the earlier GuardianCare code, and the
+late fall-detection bundle together.
 
 ## Commit-by-commit engineering timeline
 
