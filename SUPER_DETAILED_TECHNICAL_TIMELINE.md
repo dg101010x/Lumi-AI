@@ -1,311 +1,336 @@
 # Lumi AI Super Detailed Technical Timeline
 
-Lumi AI was our hackathon build for elder care. The core idea was that the
-system would watch a room, recognize people, notice falls or other important
-events, remind people about things like medication, and keep a caregiver-facing
-record of what was happening. What actually happened during the hackathon was
-that we built that idea in pieces under time pressure. We started with the room
-camera and preview path, then split into sender and receiver pieces, then built
-the Windows fallback, then spent a huge part of the day getting face syncing,
-image handling, and Supabase updates to behave correctly, while fall-detection
-work kept arriving in parallel.
+Lumi AI was our elder-care hackathon project. The idea was simple to explain
+but hard to build in one day: use a camera and AI to watch a room, recognize
+people, notice important events like falls, remember what happened, and support
+care tasks like reminders. During the hackathon, we did not build it in one
+straight line. We first tried to prove the camera and preview path, then we
+made it shareable, then we split the system between devices, then we built a
+Windows fallback, and then we spent a long stretch fixing how faces, images,
+and Supabase data were actually syncing.
 
 ## Saturday, May 23, 2026
 
 ### 10:26 AM
 
-We started by talking about the shape of the hackathon and what kind of build
-would actually stand out. We were not coding yet. We were deciding whether we
-were making something that felt like a real system or just a polished software
-demo. The problem at that point was that we did not have a locked direction
-yet.
+We started by talking about what kind of hackathon project would actually stand
+out and feel real. At this point we were still choosing the direction, not
+writing code. Problem: we did not have a locked idea yet, so everything was
+still open.
 
 ### 10:34 AM
 
 We dropped the earlier canvas-style idea because it felt clunky and did not
-have a hardware component. The problem at that point was that our earlier idea
-did not feel strong enough for the event, so we changed direction before the
-main build even really started.
+have a hardware side to it. That was the first real decision that pushed us
+toward the final project. Problem: our first idea did not feel strong enough
+for the event.
 
 ### 10:35 AM to 10:36 AM
 
-We decided hardware was not required, but hardware was probably how we would
-win attention. The problem at that point was that using hardware made the build
-harder, but we still chose it because it gave the project more presence.
+We decided that hardware was not required, but it would make the project feel
+more real and more memorable, so we chose that harder path anyway. Problem:
+hardware would make the build more fragile and more work, but we still wanted
+it because it gave us a better demo.
 
 ### 10:37 AM
 
-We finally said the product in one sentence: it would recognize falls and
-remind you about things. The problem at that point was that the idea was now
-bigger than a single feature. We had committed ourselves to perception, care
-logic, and some kind of data or identity layer all at once.
+We said the product idea clearly for the first time: it would recognize falls
+and remind you about things. That sentence basically set the rest of the day,
+because now we needed room perception, reminders, and some way to track people
+and events. Problem: the idea was already broad, so the scope got large very
+fast.
 
 ### 10:43 AM
 
-We were already talking about comfort and room-assistant behavior, like music
-or other supportive actions. The problem at that point was scope. The product
-was already expanding beyond just emergency detection.
+We were already talking about comfort features too, like supportive room
+assistant behavior instead of only emergency detection. This is when the idea
+started feeling more like a care companion than just a fall sensor. Problem:
+the product scope was already growing before the main build even started.
 
 ### 11:17:19 AM
 
-We made the initial repo commit and basically started from zero inside the
-repository. The problem at that point was that none of the real system pieces
-existed yet. There was no Pi runtime, no preview path, no face pipeline, no
-backend sync path, and no integrated fall-detection flow.
+We made the first repo commit and really started the project in code. At this
+point the repo did not have the real system yet. There was no Pi runtime, no
+browser preview, no face pipeline, no backend sync, and no fall-detection flow
+working together. Problem: we were starting almost from zero.
 
 ### 11:34 AM
 
-We pulled in FamiliarAI as a reference for face detection and recognition. The
-problem at that point was that we needed a concrete pattern for how to think
-about known faces, unknown faces, and matching behavior instead of inventing
-everything blindly.
+We brought in FamiliarAI as a reference for how to think about face detection,
+matching, known faces, and unknown faces. This gave us a practical model to
+copy ideas from instead of inventing the whole recognition flow from scratch.
+Problem: we needed a clear recognition pattern before building our own.
 
 ### 12:45:14 PM
 
-We got the first real Raspberry Pi and Limelight scaffold into the repo. We
-added the Pi probe script, the raw Limelight viewer, the requirements file, the
-first prompt file, and project notes. The problem at that point was basic
-camera proof. We were still trying to prove that we could discover the
-Limelight, hit its endpoints, and see the stream at all.
+We got the first Raspberry Pi and Limelight scaffold into the repo. We added
+the Pi probe script, the raw Limelight viewer, the requirements file, the first
+prompt file, and project notes. This was still pure proof-of-life work. We were
+just trying to confirm that the Pi could discover the Limelight and read the
+feed. Problem: we still did not know for sure that the camera path worked at
+all.
 
 ### 12:45:28 PM
 
-We cleaned up Python cache files right after the first Pi pass. The problem at
-that point was minor repo mess from just getting the first code to run.
+We cleaned up Python cache files right after that first Pi pass. It was a small
+step, but it showed the pace of the day: get it running first, then clean up
+the repo after. Problem: the first working pass already left small repo mess.
 
 ### 1:07:07 PM
 
 We turned the raw Limelight stream into a browser preview by adding the web
-preview bridge with a root page and MJPEG endpoint. The problem at that point
-was that an OpenCV-only window was not enough for a demo. We needed the feed in
-a browser so it was easier to see and share.
+preview bridge with a root page and an MJPEG endpoint. This was important
+because a local OpenCV window was not enough for a demo or for easy testing.
+Problem: we needed something easier to view and easier to share than a local
+Python window.
 
 ### 1:11:45 PM
 
-We prepared that preview path for Cloud Run by adding deployment files like the
-Dockerfile and `.dockerignore`. The problem at that point was that local-only
-preview was not enough anymore. We were already thinking about how to host or
-share it.
+We started preparing that preview path for deployment by adding things like the
+Dockerfile and `.dockerignore`. This was the point where we were already
+thinking beyond local testing and toward hosting. Problem: a local-only preview
+was useful, but it was not enough if other people could not reach it.
 
 ### 1:20 PM
 
-We got the first public stream link working through a tunnel. The problem at
-that point was that once the feed was public, reliability became the next
-issue. It was no longer just about “can we see the feed locally.” It became
-“will this still work when someone else opens it.”
+We got the first public stream link working through a tunnel. That was a real
+milestone because the feed was no longer trapped on one machine. Problem: as
+soon as the stream became public, reliability became the new issue, because now
+it had to keep working for other people too.
 
 ### 1:27:25 PM
 
 We added managed services and watcher behavior around the preview and tunnel so
-the public path would behave more like a real service. The problem at that
-point was that the preview could work once and still not be good enough if it
-did not stay up.
+the stream would behave more like a real service and not just a one-off local
+script. Problem: getting the feed public once was not enough if it could not
+stay up.
 
 ### 1:48 PM and 1:56 PM
 
-We were still sharing and rechecking public preview links. The problem at that
-point was that public shareability was still fragile enough that we kept having
-to test whether the feed was actually reachable.
+We were still sharing and rechecking public preview links during this part of
+the day, which shows how active the stream-sharing problem still was. Problem:
+public access was still fragile enough that we kept having to verify whether
+the link was actually reachable.
 
 ### 2:50:58 PM
 
 We split the system into a sender and a receiver. We added the Pi face sender,
-the Windows receiver, and the tunnel-related support around that flow. The
-problem at that point was that one machine alone was not giving us the control
-we wanted, so we changed the architecture and started moving data between
-systems instead of trying to do everything in one place.
+the Windows receiver, and support around that path. This changed the project
+from one-machine testing into a system where one device could capture data and
+another could process it. Problem: one machine alone was not giving us enough
+control or flexibility.
 
 ### 2:52:27 PM
 
-We were also experimenting with OpenPose around the same time. The problem at
-that point was that we still wanted a stronger pose or fall-detection path,
-even while the preview and sender/receiver work was already happening.
+We were also experimenting with OpenPose at the same time. That means we were
+not moving in one clean line. While we were still fixing preview and
+sender/receiver behavior, we were also exploring a stronger pose-based
+perception path. Problem: we still wanted a better fall-detection story while
+the main runtime was still being built.
 
 ### 3:46:09 PM
 
-We built the real Windows fallback. We added the Windows face matching flow,
-Supabase path, local live preview path, and launcher behavior. The problem at
-that point was risk. The Pi path alone was too fragile to be our only demo
-runtime, so we made a Windows path that could carry more of the system if
-needed.
+We built the real Windows fallback. We added the Windows face matching path,
+Supabase support, the local live preview, and launcher behavior. This was one
+of the biggest changes of the day because it meant the project no longer
+depended only on the Pi path. Problem: the Pi path felt too risky to be the
+only thing carrying the demo.
 
 ### 3:48 PM
 
 We were still talking about OpenPose and stronger perception even after the
-Windows fallback existed. The problem at that point was that the product still
-needed a convincing perception story, not just a stable runtime.
+Windows fallback existed. That shows we had not abandoned the perception side
+just because we found a more stable runtime path. Problem: we still needed the
+system to feel smart, not just stable.
 
 ### 4:11:40 PM
 
-We redesigned the Windows live runtime to make it usable in practice. We added
-LAN IP discovery, JPEG helper logic, image serving over HTTP, reused detections
-between frames, added frame-skipping controls like `process-every-n`, added
-`detect-scale`, and wired in the Gemini description and speaker hooks. The
-problem at that point was live usability. The system existed, but it was too
-laggy and too rough to feel good.
+We redesigned the Windows live runtime so it would actually feel usable. We
+added LAN IP discovery, JPEG helper logic, HTTP image serving, detection reuse
+between frames, frame-skipping controls like `process-every-n`, `detect-scale`,
+and the Gemini description plus speaker hooks. This was the part where the
+Windows path stopped being just possible and started being practical. Problem:
+the live system existed, but it was too laggy and rough to feel good.
 
 ### 4:12:05 PM
 
-We standardized the default unknown label to `unidentified`. The problem at
-that point was messy naming behavior once the live path started creating or
-showing unknown people.
+We cleaned up the default unknown-face label and changed it to
+`unidentified`. This was a small change, but it mattered because the live app
+was now creating and showing unknown people. Problem: the naming behavior was
+messy and not clean enough for the UI or data flow.
 
 ### 4:18:38 PM
 
-We added a direct Supabase test insert script. The problem at that point was
-that when something failed, we could not tell if it was the app logic, the
-backend schema, the auth, or RLS. We needed a direct backend test path.
+We added a direct Supabase test insert script so we could test the backend
+without guessing whether a failure came from the app or the database layer.
+Problem: when something broke, we could not tell if it was app logic, schema,
+auth, or RLS.
 
 ### 4:21 PM
 
-We got the medication schedule information while the runtime was still being
-debugged. The problem at that point was that the care-assistant product layer
-was still growing while the infrastructure underneath it was not fully stable.
+We got the medication schedule while the runtime was still being debugged. This
+shows the care-assistant side of the project was still growing in parallel with
+the lower-level engineering work. Problem: product features were still being
+added while the underlying system was not fully stable.
 
 ### 4:22:17 PM
 
-We added the SwiftUI iOS app scaffold and the Next.js onboarding web app. The
-problem at that point was that the product needed user-facing surfaces too, not
-just perception and backend code, so we were building those in parallel.
+We added the SwiftUI iOS app scaffold and the Next.js onboarding web app. That
+meant the repo was growing in two directions at once: user-facing surfaces and
+backend/perception plumbing. Problem: we needed product-facing interfaces too,
+not just camera and backend code.
 
 ### 4:24 PM to 4:26 PM
 
-We were already compressing the build into pitch language while still coding.
-The problem at that point was that the system had to be explainable at the same
-time that it was still changing.
+We were already tightening the pitch and how we would explain the system, even
+while the build was still changing underneath us. Problem: we needed the
+project to be explainable before it was even fully settled.
 
 ### 4:31:29 PM
 
-We changed the image upload path to base64 by adding `/upload-base64` and the
-helper that captures the first detected face and sends it in that form. The
-problem at that point was that local file assumptions were getting in the way
-of reliable transport and backend writes.
+We changed image upload to a base64 path by adding `/upload-base64` and the
+helper that captures the first detected face and sends it that way. This was a
+big backend change because it moved us away from weak local-file assumptions.
+Problem: the original image transport path was not reliable enough for syncing
+and backend writes.
 
 ### 4:37 PM
 
-We had a strong enough technical summary to explain the stack clearly, but we
-also knew one major problem: matched known faces were not updating correctly
-the way new unknown faces were. That problem drove the next series of backend
-fixes.
+By this point we could clearly explain the technical stack, but we also knew
+the biggest live bug we still had: matched known faces were not updating the
+same way new unknown faces were. Problem: the backend path handled new faces
+better than already-known ones.
 
 ### 4:47:51 PM
 
-We improved the local face receiver view and added startup support. The problem
-at that point was operational friction. We needed the receiver to be easier to
-watch, restart, and test repeatedly.
+We improved the local face receiver view and added startup support. This made
+the receiver easier to inspect, restart, and test over and over. Problem: the
+receiver path still had too much friction for repeated live testing.
 
 ### 5:01:02 PM
 
-We improved face matching and preview behavior by normalizing embeddings from
-Supabase and giving the browser a better local camera path. The problem at that
-point was quiet compatibility and correctness issues in the Windows path, not
-big architecture problems.
+We improved face matching and preview behavior by normalizing embeddings coming
+back from Supabase and giving the browser a better local camera path. These
+were quieter fixes, but they mattered because the Windows path was now failing
+in more subtle ways instead of only obvious ones. Problem: compatibility and
+correctness issues were still hurting the live path.
 
 ### 5:08:04 PM
 
-We vendored the base64 tooling because it had become a core part of the image
-path. The problem at that point was that the image transport layer was no
-longer optional glue code. It was central infrastructure.
+We vendored the base64 tooling because the image path depended on it heavily by
+this point. That shows how important image transport had become to the whole
+system. Problem: base64 handling was no longer just a helper detail, it was now
+part of the core pipeline.
 
 ### 5:08 PM
 
-We received `guardiancare.zip`, which was late-stage fall-detection work. The
-problem at that point was that major fall-related code was still arriving while
-the main live face and backend flow was still being fixed.
+We received `guardiancare.zip`, which was late-stage fall-detection work. This
+meant a major perception artifact was still arriving while the face and backend
+path was still being fixed. Problem: important fall-detection code was showing
+up late, while the main live system was still unstable.
 
 ### 5:09:32 PM and 5:12:29 PM
 
-We revised the README while the system was still changing. The problem at that
-point was that the story and the implementation were moving at the same time,
-so documentation and code were both active work.
+We revised the README while code was still changing. That shows the story and
+the implementation were moving at the same time. Problem: documentation could
+not wait until the end because the pitch story also needed work.
 
 ### 5:14:34 PM
 
 We made image-table handling more explicit and tightened unknown-face naming
-again around `unidentified`. The problem at that point was that face rows and
-image rows were not being handled cleanly enough yet.
+again around `unidentified`. This was another step toward making the face rows
+and image rows behave more cleanly together. Problem: image and face data were
+still not connected in a clean enough way.
 
 ### 5:21:31 PM
 
 We changed the backend flow so matched people were treated as update targets,
-not just new unknown people as inserts. The problem at that point was the one
-we had already identified earlier: known faces were lagging behind unknowns in
-the backend state.
+not just new unknown people as inserts. This was a direct response to the bug
+we had already identified earlier. Problem: known faces were falling behind
+unknown faces in the backend state.
 
 ### 5:24:29 PM
 
-We pulled the earlier GuardianCare fall-detection lineage into `main`. The
-problem at that point was that the project no longer had one clean line of
-work. We were now carrying multiple real implementation lines at once.
+We pulled the earlier GuardianCare fall-detection lineage into `main`. At this
+point the repo clearly had multiple real technical lines in it at once. Problem:
+the project no longer had one clean implementation path, so preserving all the
+real work became part of the job.
 
 ### 5:33:07 PM
 
 We kept using direct sample-image scripts to force backend behavior and make
-sure unknowns registered correctly. The problem at that point was that we still
-did not fully trust the live loop by itself.
+sure unknown faces registered correctly. This shows we still did not trust the
+live loop by itself. Problem: the live app alone was not enough to prove the
+backend was behaving correctly.
 
 ### 5:36:10 PM
 
-We added a real-time event log and telemetry status to the Windows path. The
-problem at that point was visibility. We needed the app to explain what it was
-doing while it was running so we could debug it faster.
+We added a real-time event log and telemetry status to the Windows path. This
+made the app tell us what it was doing while it was running instead of leaving
+us to guess. Problem: we needed better visibility into the system while live
+debugging it.
 
 ### 5:39:39 PM
 
 We tuned logging and sensitivity to reduce duplicate detections and duplicate
-uploads. The problem at that point was repeated creation and repeated
-processing, not missing features.
+uploads. This part of the work was about making the live loop calmer and less
+wasteful. Problem: repeated detection and repeated creation were causing noisy
+behavior.
 
 ### 5:42:43 PM
 
 We fixed a real upload control-flow bug by moving the embedding gate deeper into
-the unknown-face branch and reducing cooldown. The problem at that point was
-that a face could be detected and still never get uploaded because the code was
-exiting too early.
+the unknown-face branch and reducing cooldown. Before this, a face could be
+detected and still never get uploaded because the code could exit too early.
+Problem: the upload path was being skipped even when detection worked.
 
 ### 5:44:40 PM
 
-We added more verbose logging because the sync issues were still not fully
-solved. The problem at that point was that the previous fix helped, but we
-still did not trust the end-to-end upload behavior enough.
+We added more verbose logging because the sync issues still were not fully
+settled. That meant the previous fix helped, but it was not the end of the
+problem. Problem: we still did not trust the end-to-end sync enough.
 
 ### 5:46:13 PM
 
 We finally gave matched faces explicit backend update behavior, including image
-record updates and linkage updates. The problem at that point was the exact one
-we had been chasing since the mid-afternoon summary: matched users were not
-updating correctly.
+updates and linkage updates. This was the real fix for the bug we had been
+chasing since the mid-afternoon summary. Problem: matched users were still not
+updating correctly in Supabase.
 
 ### 5:48:22 PM
 
-We reached the first point where the Windows and Supabase path felt stable. The
-problem at that point was less about one obvious missing fix and more about
-whether the whole chain finally behaved consistently enough to trust.
+We reached the first point where the Windows and Supabase path felt stable as a
+whole. By now we had base64 transport, direct backend tests, better logging,
+duplicate suppression, upload fixes, and matched-face updates all working
+together better. Problem: the remaining issue was no longer one obvious bug, it
+was whether the whole chain could be trusted consistently.
 
 ### 5:49:29 PM
 
 We improved the recognized-faces gallery so it could decode and show backend
-image data correctly. The problem at that point was that backend state existed,
-but it was not being shown clearly enough in the UI.
+image data correctly. This mattered because it turned backend state into
+something we could actually see in the UI. Problem: even when the backend had
+data, the UI still was not showing it clearly enough.
 
 ### 5:57:38 PM
 
 We did the last big cleanup of dashboard and image semantics by stopping the
 code from assuming `photo_url` was always directly usable, adding
 `find_image_by_id`, and wiring the dashboard to the `images` table more
-properly. The problem at that point was structural mismatch between face rows,
-image rows, and what the dashboard expected.
+properly. Problem: the face rows, image rows, and dashboard assumptions still
+did not line up cleanly.
 
 ### 9:44 PM
 
-We started merging the active branches into `main`. The problem at that point
-was preservation. We had multiple real working lines of effort and did not want
-to lose any of them.
+We started merging the active branches into `main`. By then, the goal was no
+longer just to keep building. It was also to make sure we did not lose any of
+the real work from the different paths. Problem: we had multiple working lines
+of effort and needed to preserve them together.
 
 ### 9:51 PM onward
 
 We shifted into preservation mode. We rewrote the README, unpacked
 `guardiancare.zip` into `guardiancare_late/`, aligned the docs with the code
-history, and added the technical writeups. The problem at that point was making
-sure the final repo actually reflected what we built instead of pretending the
-day had been cleaner than it really was.
+history, and added the technical writeups. Problem: we needed the final repo to
+honestly show what we built and what actually happened, instead of pretending
+the day had been cleaner than it really was.
